@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import config, embedding, ingest, llm, retrieval
 from .models import Chunk, Module, ModuleNotes, Quiz, Syllabus
+from .style import StyleProfile
 
 _CITATION = re.compile(r"\[c(\d+)\]")
 
@@ -88,6 +89,7 @@ def generate_module_notes(
     namespace: str,
     cfg: config.RetrievalConfig | None = None,
     with_quiz: bool = False,
+    style: StyleProfile | None = None,
 ) -> ModuleNotes:
     """Per-module loop body: retrieve, rerank, generate cited notes."""
     cfg = cfg or config.EMBEDDING
@@ -126,6 +128,10 @@ def generate_module_notes(
     # cache if the notes call wrote exactly it.
     passages = f"Source passages:\n\n{_format_passages(chunks)}"
 
+    # Style guidance goes last, after the grounding rules and the task, so it
+    # reads as a modifier on how to write rather than as a competing brief.
+    style_instruction = f"\n\n{style.as_instruction()}" if style else ""
+
     body = llm.complete(
         model=config.GENERATION_MODEL,
         system=_GROUNDING_SYSTEM,
@@ -133,7 +139,7 @@ def generate_module_notes(
         prompt=(
             f"Module: {module.title}\n\n"
             f"The reader should come away able to:\n{goals}\n\n"
-            f"{_NOTES_TASK}"
+            f"{_NOTES_TASK}{style_instruction}"
         ),
         max_tokens=config.MAX_TOKENS_NOTES,
     )
@@ -210,6 +216,7 @@ def run_course(
     syllabus: Syllabus | None = None,
     with_quiz: bool = False,
     namespace: str | None = None,
+    style: StyleProfile | None = None,
 ) -> tuple[Syllabus, list[ModuleNotes]]:
     """Plan, ensure the corpus exists, then run every module concurrently.
 
@@ -252,7 +259,7 @@ def run_course(
         notes = list(
             pool.map(
                 lambda m: generate_module_notes(
-                    m, namespace=namespace, cfg=cfg, with_quiz=with_quiz
+                    m, namespace=namespace, cfg=cfg, with_quiz=with_quiz, style=style
                 ),
                 syllabus.modules,
             )

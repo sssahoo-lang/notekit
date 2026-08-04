@@ -33,6 +33,17 @@ CREATE TABLE IF NOT EXISTS chunks (
     tsv          tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
 );
 
+-- A description of how someone writes, never what they wrote about. Derived
+-- from a writing sample at learn time; the sample itself is not stored, and the
+-- profile is deliberately content-free so it cannot smuggle unsourced facts
+-- into generated notes.
+CREATE TABLE IF NOT EXISTS style_profiles (
+    user_id      TEXT PRIMARY KEY,
+    profile      JSONB NOT NULL,
+    sample_chars INT NOT NULL,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx
     ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_tsv_idx

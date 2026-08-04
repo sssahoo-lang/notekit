@@ -3,9 +3,6 @@
 Turns a learning goal into a course of study notes written strictly from real
 source material, with every claim cited back to the passage it came from.
 
-> Milestone 1 of 7. The headline faithfulness numbers land in milestone 2; this
-> README gets rewritten around them then.
-
 ## Status
 
 | Milestone | State |
@@ -13,15 +10,12 @@ source material, with every claim cited back to the passage it came from.
 | 1. Core loop — ingest, retrieve, generate cited notes | working end to end |
 | 2. Eval layer — faithfulness, coverage, refusal calibration | working; Langfuse tracing not yet wired |
 | 3. Quiz generation | working; does not yet reuse the notes cache |
-| 4. Upload adapter + per-user namespaces | working; style-matching not started |
+| 4. Upload adapter, per-user namespaces, style matching | working |
 | 5. Open-domain routing | not started |
 | 6. Next.js UI | not started |
 | 7. Deploy | not started |
 
 ## Measured results
-
-One course on Q-learning, five modules, over a corpus of 13 documents drawn from
-Wikipedia and arXiv:
 
 Measured over a fixed syllabus (`fixtures/q-learning.json`, 4 modules, 12
 learning goals) against a 13-document corpus drawn from Wikipedia and arXiv:
@@ -123,38 +117,60 @@ Three lanes, separated by whether they are allowed to block the user:
 Configuration — model tiers, chunking, retrieval parameters, the refusal
 threshold — lives in `src/notekit/config.py`.
 
-## Planned: style-matched notes (milestone 4)
+## Style-matched notes, and what they cost
 
-When a user uploads their own notes, the system should write in the register
-they already use — their vocabulary, their density, prose or bullets. Notes that
-read like your own are easier to absorb than notes that read like a textbook.
+Learn how someone writes from any sample, then generate any course in that
+voice — over their uploaded files, arXiv, or Wikipedia. Style is a per-user
+property, independent of the corpus:
 
-The design constraint is that this must not cost grounding. Pasting someone's
-notes into the generation prompt as a style exemplar puts a block of
-content-shaped text next to the retrieved passages, and the model will sometimes
-assert things from it — the exact failure the faithfulness metric exists to
-catch.
+```bash
+uv run notekit style learn ~/my-writing.md --user sriya
+uv run notekit course "teach me Q-learning" --user sriya
+```
 
-So style and content stay separate. At upload time, a `StyleProfile` is
-extracted once: sentence length, prose versus bullets, formality, use of
-analogies or worked examples, notation preference, domain shorthand the writer
-already uses. Generation receives that profile and never the source text. Facts
-can only enter through retrieved passages; style enters as a description of
-form.
+Style transfers well. A profile learned from casual writing about databases
+produced Q-learning notes opening "So let's start with the big picture",
+explaining the field through learning to ride a bike and the
+exploration-exploitation trade-off through choosing ice cream flavours — in
+second person, with inline citations intact, and with no database subject matter
+carried across.
 
-This is testable with machinery that already exists. Run a fixed syllabus with
-and without a profile and compare faithfulness across repeats. The claim worth
-making is not "it adapts to your writing style" but "personalisation cost N
-points of faithfulness, measured".
+**It costs about 10 points of faithfulness.** Measured over the same fixed
+syllabus, two runs each:
 
-One distinction is deliberate. Matching how someone *writes* is in scope.
-Matching how someone *understands* is not: student notes often contain
-misconceptions, and a system that mirrors them would reinforce errors while
-citing correct sources — grounded-looking and wrong. Difficulty is controlled by
-the level in the learning goal, which stays independent of style.
+| Voice | Faithfulness | Claims per course |
+|---|---|---|
+| Default | 97.3%, 98.8% | 143, 169 |
+| Learned style | 89.5%, 85.5% | 86, 83 |
 
-Uploaded notes are personal data. Profiles derived from them fall under the same
-per-user isolation as the corpus itself.
+That gap is far outside the ~1.5-point run-to-run noise, so it is a real effect
+rather than variance. Inspecting the unsupported claims shows two causes:
+
+1. **Genuinely unsourced facts.** Reaching for familiar comparisons pulls in
+   outside knowledge — "in classical planning, the model is already known", "the
+   multi-armed bandit problem formalises..." — that no passage supplied. This is
+   a true grounding failure and the reason the feature is not on by default.
+2. **Rhetorical framing scored as assertion.** "Exploration is the cost required
+   to learn" is a framing device, not a claim about the subject, but the claim
+   extractor cannot tell the difference. Part of the 10 points is measurement
+   artefact rather than hallucination.
+
+Separating those two would need the claim extractor to distinguish illustrative
+from assertive sentences. Until then the honest statement is that personalised
+notes are measurably less grounded, by an amount whose upper bound is 10 points.
+
+The profile itself is safe by construction: it describes form only — sentence
+rhythm, register, structure, habits of expression — and is verified to contain
+no subject matter from the sample. The sample is never stored and never sent at
+generation time. Pasting raw notes in as a style exemplar would put
+content-shaped text beside the retrieved passages, and the model would assert
+from it.
+
+One boundary is deliberate. Matching how someone *writes* is in scope. Matching
+how someone *understands* is not: student notes often contain misconceptions,
+and mirroring them would reinforce errors while citing correct sources —
+grounded-looking and wrong. Difficulty is controlled by the level in the
+learning goal, independently of style.
 
 ## Known limitations
 

@@ -9,7 +9,9 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
-from . import calibration, config, db, evaluation, ingest, llm, retrieval, upload
+from . import (
+    calibration, config, db, evaluation, ingest, llm, retrieval, style, upload,
+)
 from .adapters import DEFAULT_ADAPTERS
 from .models import Syllabus
 from .pipeline import plan_syllabus, run_course
@@ -72,11 +74,29 @@ def course_cmd(
     namespace: str = typer.Option(
         None, "--namespace", "-n", help="Build only from this namespace (e.g. uploads)"
     ),
+    user: str = typer.Option(
+        None, "--user", "-u", help="Write in this user's learned style"
+    ),
 ) -> None:
     """Plan a syllabus and write cited notes for every module."""
     llm.reset_usage()
+
+    profile = style.load(user) if user else None
+    if user and not profile:
+        console.print(
+            f"[yellow]No style profile for {user}; writing in the default voice. "
+            f"Run `notekit style learn` first.[/]"
+        )
+    elif profile:
+        console.print(f"[dim]style: {user}[/]")
+
     syllabus, notes = run_course(
-        goal, limit=limit, skip_ingest=skip_ingest, with_quiz=quiz, namespace=namespace
+        goal,
+        limit=limit,
+        skip_ingest=skip_ingest,
+        with_quiz=quiz,
+        namespace=namespace,
+        style=profile,
     )
 
     console.print(f"\n[bold]{syllabus.summary}[/]")
@@ -143,6 +163,78 @@ def upload_cmd(
         console.print("  [yellow]skipped[/] ", end="")
         console.print(reason, markup=False, highlight=False)
     console.print(f"\nBuild a course from it:\n  notekit course \"...\" -n {namespace}")
+
+
+style_app = typer.Typer(help="Learn and inspect writing styles")
+app.add_typer(style_app, name="style")
+
+
+@style_app.command("learn")
+def style_learn_cmd(
+    paths: list[str] = typer.Argument(..., help="Files holding a writing sample"),
+    user: str = typer.Option(..., "--user", "-u", help="User id to save under"),
+) -> None:
+    """Learn how someone writes from a sample of their own writing.
+
+    The sample is used once and not stored. Only a description of form is kept.
+    """
+    llm.reset_usage()
+    try:
+        files = upload.collect(paths)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(1) from exc
+
+    samples = []
+    for path in files:
+        try:
+            samples.append(upload.extract(path))
+        except upload.UnsupportedFile as exc:
+            console.print("  [yellow]skipped[/] ", end="")
+            console.print(str(exc), markup=False, highlight=False)
+
+    sample = "\n\n".join(samples)
+    if not sample.strip():
+        console.print("[red]No readable text in the sample.[/]")
+        raise typer.Exit(1)
+
+    try:
+        profile = style.learn(sample)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(1) from exc
+
+    style.save(user, profile, len(sample))
+    console.print(f"[green]Learned style for[/] {user} from {len(sample):,} chars\n")
+    _print_style(profile)
+    _print_usage()
+
+
+@style_app.command("show")
+def style_show_cmd(
+    user: str = typer.Option(..., "--user", "-u", help="User id"),
+) -> None:
+    """Show the stored style profile. Needs no API key."""
+    profile = style.load(user)
+    if not profile:
+        console.print(f"[yellow]No style profile for {user}.[/]")
+        raise typer.Exit(1)
+    _print_style(profile)
+
+
+def _print_style(profile: style.StyleProfile) -> None:
+    console.print(profile.summary, markup=False, highlight=False)
+    table = Table(show_header=False, title_style="dim")
+    table.add_column("trait")
+    table.add_column("value")
+    for field in (
+        "sentence_length", "structure", "formality", "person",
+        "vocabulary", "uses_analogies", "uses_worked_examples", "uses_notation",
+    ):
+        table.add_row(field.replace("_", " "), str(getattr(profile, field)))
+    console.print(table)
+    for habit in profile.signature_habits:
+        console.print(f"  · {habit}", markup=False, highlight=False)
 
 
 @app.command("plan")
@@ -224,6 +316,9 @@ def eval_cmd(
     repeat: int = typer.Option(
         1, help="Run N times and report the spread. Coverage needs this."
     ),
+    user: str = typer.Option(
+        None, "--user", "-u", help="Score notes written in this user's style"
+    ),
 ) -> None:
     """Generate a course, then score it for faithfulness and coverage.
 
@@ -251,13 +346,21 @@ def eval_cmd(
             "comparable with any other.[/]"
         )
 
+    profile = style.load(user) if user else None
+    if user and not profile:
+        console.print(f"[red]No style profile for {user}.[/]")
+        raise typer.Exit(1)
+    console.print(f"[dim]style: {user or 'none (default voice)'}[/]")
+
     llm.reset_usage()
 
     runs = []
     for n in range(repeat):
         if repeat > 1:
             console.print(f"[dim]run {n + 1}/{repeat}[/]")
-        syllabus, notes = run_course(goal, skip_ingest=skip_ingest, syllabus=fixture)
+        syllabus, notes = run_course(
+            goal, skip_ingest=skip_ingest, syllabus=fixture, style=profile
+        )
         results = evaluation.evaluate_course(notes, syllabus.modules)
         runs.append((results, evaluation.aggregate(results)))
 
@@ -340,7 +443,8 @@ def _print_spread(runs: list) -> None:
         spread = max(values) - min(values)
         console.print(
             f"[bold]{label}[/] {mean:.1%} "
-            f"(range {min(values):.1%}–{max(values):.1%}, spread {spread:.1f} pts)"
+            # spread is a fraction; percentage points need the x100.
+            f"(range {min(values):.1%}–{max(values):.1%}, spread {spread * 100:.1f} pts)"
         )
 
 
