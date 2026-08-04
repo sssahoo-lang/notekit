@@ -8,6 +8,7 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from . import config, db, ingest, llm, retrieval
+from .adapters import DEFAULT_ADAPTERS
 from .pipeline import run_course
 
 app = typer.Typer(add_completion=False, help="Grounded course-notes agent")
@@ -17,11 +18,22 @@ console = Console()
 @app.command("ingest")
 def ingest_cmd(
     topic: str = typer.Argument(..., help="Topic to fetch sources for"),
-    limit: int = typer.Option(10, help="Maximum documents to fetch"),
+    limit: int = typer.Option(10, help="Maximum documents to fetch per source"),
+    adapters: str = typer.Option(
+        ",".join(DEFAULT_ADAPTERS), help="Comma-separated sources: wikipedia,arxiv"
+    ),
+    force: bool = typer.Option(False, help="Re-ingest even if the topic is cached"),
 ) -> None:
     """Fetch and index a corpus. Needs no API key."""
     slug = topic.lower().replace(" ", "-")
-    summary = ingest.ingest_topic(slug=slug, query=topic, namespace=slug, limit=limit)
+    summary = ingest.ingest_topic(
+        slug=slug,
+        query=topic,
+        namespace=slug,
+        limit=limit,
+        adapter_names=[a.strip() for a in adapters.split(",") if a.strip()],
+        force=force,
+    )
 
     if summary.get("cached"):
         console.print(f"[yellow]Already ingested[/] — {summary['chunks']} chunks.")

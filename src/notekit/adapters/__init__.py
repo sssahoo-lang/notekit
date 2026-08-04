@@ -26,5 +26,13 @@ class SourceAdapter(Protocol):
 
 
 from .arxiv import ArxivAdapter  # noqa: E402
+from .wikipedia import WikipediaAdapter  # noqa: E402
 
-REGISTRY: dict[str, SourceAdapter] = {"arxiv": ArxivAdapter()}
+REGISTRY: dict[str, SourceAdapter] = {
+    "wikipedia": WikipediaAdapter(),
+    "arxiv": ArxivAdapter(),
+}
+
+# Wikipedia first: foundational modules fail without encyclopaedic material,
+# and arXiv alone refuses most of them.
+DEFAULT_ADAPTERS = ["wikipedia", "arxiv"]
