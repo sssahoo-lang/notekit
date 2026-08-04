@@ -11,12 +11,44 @@ source material, with every claim cited back to the passage it came from.
 | Milestone | State |
 |---|---|
 | 1. Core loop — ingest, retrieve, generate cited notes | working end to end |
-| 2. Eval layer — Ragas faithfulness + coverage, Langfuse traces | not started |
+| 2. Eval layer — faithfulness, coverage, refusal calibration | working; Langfuse tracing not yet wired |
 | 3. Quiz generation | not started |
 | 4. Upload adapter | not started |
 | 5. Open-domain routing | not started |
 | 6. Next.js UI | not started |
 | 7. Deploy | not started |
+
+## Measured results
+
+One course on Q-learning, five modules, over a corpus of 13 documents drawn from
+Wikipedia and arXiv:
+
+| Metric | Result |
+|---|---|
+| Faithfulness | **95.7%** (220/230 claims entailed by their retrieved passages) |
+| Coverage | 60.0% of stated learning goals addressed |
+| Refusal accuracy | **100%** (16/16 probe questions classified correctly) |
+| Cost per evaluated course | $0.37 |
+
+Refusal is calibrated rather than guessed. Questions the corpus covers rerank at
++0.28 to +8.50; questions it does not (French Revolution, sourdough
+fermentation, Honda timing belts) score −3.54 to −11.01. The gap is clean, and
+the threshold sits inside it:
+
+```bash
+uv run notekit calibrate evalsets/q-learning.json
+```
+
+Two caveats worth stating plainly. Faithfulness is judged by Haiku against notes
+written by Sonnet — same model family, so the grader shares blind spots with the
+writer, and the number should be read as a regression signal rather than an
+absolute. And these are single-run figures on one topic; there is no variance
+estimate yet.
+
+The weak number is coverage. The notes are faithful to their sources but address
+only 60% of the learning goals the planner set, because generation follows what
+retrieval returned rather than what the module asked for. That gap is the next
+thing worth closing.
 
 ## Setup
 
@@ -45,6 +77,12 @@ uv run notekit search "how does the Bellman equation define the Q function" -n q
 uv run notekit course "teach me Q-learning at an intermediate level"
 
 uv run notekit stats q-learning
+
+# Score a generated course for faithfulness and coverage.
+uv run notekit eval "teach me Q-learning at an intermediate level" --explain
+
+# Calibrate the refusal threshold. Needs no API key.
+uv run notekit calibrate evalsets/q-learning.json
 ```
 
 ## How it works

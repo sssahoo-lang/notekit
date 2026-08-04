@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
-from . import config, db, ingest, llm, retrieval
+from . import calibration, config, db, evaluation, ingest, llm, retrieval
 from .adapters import DEFAULT_ADAPTERS
 from .pipeline import run_course
 
@@ -90,6 +90,101 @@ def course_cmd(
             c = sources[chunk_id]
             console.print(f"  [cyan]{c.citation_key}[/] {c.document_title} — {c.document_url}")
         console.print()
+
+    _print_usage()
+
+
+@app.command("calibrate")
+def calibrate_cmd(
+    evalset: str = typer.Argument(..., help="Path to a calibration set JSON"),
+) -> None:
+    """Find the refusal threshold that best separates covered from uncovered.
+
+    Needs no API key — retrieval and reranking are local.
+    """
+    report = calibration.calibrate(calibration.CalibrationSet.load(evalset))
+
+    table = Table(title="Refusal calibration", title_style="dim")
+    for column in ("query", "expected", "top score"):
+        table.add_column(column)
+    for p in sorted(report.probes, key=lambda p: p.top_score or -99, reverse=True):
+        table.add_row(
+            p.query[:52],
+            "covered" if p.expected_covered else "uncovered",
+            f"{p.top_score:.2f}" if p.top_score is not None else "—",
+        )
+    console.print(table)
+
+    if report.suggested_threshold is None:
+        console.print("[red]No scores returned — is the namespace ingested?[/]")
+        raise typer.Exit(1)
+
+    console.print(
+        f"\ncurrent threshold {report.current_threshold:+.2f} "
+        f"→ accuracy {report.current_accuracy:.0%}"
+    )
+    console.print(
+        f"suggested threshold {report.suggested_threshold:+.2f} "
+        f"→ accuracy {report.accuracy:.0%}"
+    )
+    if report.separated:
+        console.print("[green]Covered and uncovered questions separate cleanly.[/]")
+    else:
+        console.print(
+            "[yellow]No threshold separates them perfectly — "
+            "the overlapping questions are worth reading.[/]"
+        )
+
+
+@app.command("eval")
+def eval_cmd(
+    goal: str = typer.Argument(..., help="Learning goal to generate and score"),
+    skip_ingest: bool = typer.Option(True, help="Assume the corpus already exists"),
+    explain: bool = typer.Option(False, help="Print every unsupported claim"),
+) -> None:
+    """Generate a course, then score it for faithfulness and coverage."""
+    llm.reset_usage()
+    syllabus, notes = run_course(goal, skip_ingest=skip_ingest)
+    results = evaluation.evaluate_course(notes, syllabus.modules)
+    summary = evaluation.aggregate(results)
+
+    table = Table(title="Evaluation", title_style="dim")
+    for column in ("module", "claims", "supported", "faithfulness", "coverage"):
+        table.add_column(column)
+    for r in results:
+        if r.refused:
+            table.add_row(r.module_title[:34], "—", "—", "[yellow]refused[/]", "—")
+            continue
+        table.add_row(
+            r.module_title[:34],
+            str(len(r.claims)),
+            str(sum(c.supported for c in r.claims)),
+            f"{r.faithfulness:.0%}" if r.faithfulness is not None else "—",
+            f"{r.coverage_score:.0%}" if r.coverage_score is not None else "—",
+        )
+    console.print(table)
+
+    faith = summary["faithfulness"]
+    cov = summary["coverage"]
+    console.print(
+        f"\n[bold]faithfulness {faith:.1%}[/] "
+        f"({summary['supported']}/{summary['claims']} claims supported)"
+        if faith is not None
+        else "\n[yellow]No claims scored.[/]"
+    )
+    if cov is not None:
+        console.print(f"[bold]coverage {cov:.1%}[/]")
+    console.print(
+        f"[dim]{summary['refused']}/{summary['modules']} modules refused for "
+        f"lack of source material[/]"
+    )
+
+    if explain:
+        for r in results:
+            for c in r.unsupported:
+                console.print(f"\n[red]unsupported[/] ({r.module_title[:40]})")
+                console.print(f"  claim: {c.claim}", markup=False)
+                console.print(f"  why:   {c.reason}", markup=False)
 
     _print_usage()
 

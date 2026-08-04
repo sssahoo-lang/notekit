@@ -1,0 +1,23 @@
+{
+  "namespace": "q-learning",
+  "covered": [
+    "what is the Q-learning update rule",
+    "how does the Bellman equation define the value function",
+    "why must a reinforcement learning agent explore",
+    "what is the difference between on-policy and off-policy learning",
+    "how does a discount factor affect future rewards",
+    "what is temporal difference learning",
+    "how do deep Q-networks use function approximation",
+    "what is an epsilon-greedy policy"
+  ],
+  "uncovered": [
+    "what were the main causes of the French Revolution",
+    "how does photosynthesis convert light into chemical energy",
+    "what is the recommended dosage of amoxicillin for children",
+    "how do I file a US federal tax return as a non-resident",
+    "what are the rules of offside in association football",
+    "how does sourdough starter fermentation work",
+    "what is the plot of Wuthering Heights",
+    "how do I replace a timing belt on a Honda Civic"
+  ]
+}
