@@ -11,7 +11,8 @@ decide.
 from __future__ import annotations
 
 import re
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from . import config, embedding, ingest, llm, retrieval
 from .models import Chunk, Module, ModuleNotes, Quiz, Syllabus
@@ -205,6 +206,86 @@ def generate_quiz(
         q for q in quiz.questions if 0 <= q.answer_index < len(q.options)
     ]
     return quiz
+
+
+def run_course_events(
+    goal: str,
+    *,
+    limit: int = 10,
+    cfg: config.RetrievalConfig | None = None,
+    skip_ingest: bool = False,
+    syllabus: Syllabus | None = None,
+    with_quiz: bool = False,
+    namespace: str | None = None,
+    style: StyleProfile | None = None,
+) -> Iterator[dict]:
+    """Same work as `run_course`, yielded as it completes.
+
+    Modules are emitted the moment each finishes rather than after all of them
+    do, so a reader can start on module one while the rest are still being
+    written. This is the whole reason the module loop runs concurrently.
+    """
+    cfg = cfg or config.EMBEDDING
+
+    yield {"type": "planning"}
+    syllabus = syllabus or plan_syllabus(goal)
+
+    if namespace:
+        skip_ingest = True
+    namespace = namespace or syllabus.topic_slug
+
+    yield {
+        "type": "syllabus",
+        "summary": syllabus.summary,
+        "namespace": namespace,
+        "modules": [m.title for m in syllabus.modules],
+    }
+
+    if not skip_ingest:
+        yield {"type": "ingesting", "namespace": namespace}
+        summary = ingest.ingest_topic(
+            slug=syllabus.topic_slug,
+            query=[
+                syllabus.topic_slug.replace("-", " "),
+                *(m.query for m in syllabus.modules),
+            ],
+            namespace=namespace,
+            limit=limit,
+            cfg=cfg,
+        )
+        yield {"type": "ingested", "cached": summary.get("cached", False),
+               "chunks": summary.get("chunks", 0)}
+
+    embedding.warm(cfg)
+
+    with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_MODULES) as pool:
+        futures = {
+            pool.submit(
+                generate_module_notes,
+                module,
+                namespace=namespace,
+                cfg=cfg,
+                with_quiz=with_quiz,
+                style=style,
+            ): index
+            for index, module in enumerate(syllabus.modules)
+        }
+        for future in as_completed(futures):
+            index = futures[future]
+            try:
+                notes = future.result()
+            except Exception as exc:  # noqa: BLE001
+                # One failed module must not lose the others already written.
+                yield {"type": "module_error", "index": index, "error": str(exc)}
+                continue
+            yield {"type": "module", "index": index, "notes": notes.model_dump()}
+
+    entries, cost = llm.usage_report()
+    yield {
+        "type": "done",
+        "estimated_cost_usd": round(cost, 4),
+        "usage": [e.model_dump() for e in entries],
+    }
 
 
 def run_course(

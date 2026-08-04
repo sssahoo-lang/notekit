@@ -101,6 +101,37 @@ uv run notekit eval --syllabus fixtures/q-learning.json --repeat 3 --explain
 uv run notekit calibrate evalsets/q-learning.json
 ```
 
+## HTTP API
+
+```bash
+uv run uvicorn notekit.api:app --reload --port 8000
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/health` | Liveness plus database connectivity |
+| `GET /api/namespaces` | Indexed namespaces with document and chunk counts |
+| `POST /api/course` | Generate a course, streamed as SSE |
+| `POST /api/plan` | Plan a syllabus without generating |
+| `GET /api/search` | Inspect what retrieval returns |
+| `POST /api/upload` | Index uploaded files into a user namespace |
+| `GET /api/style/{user}` · `POST /api/style/learn` | Read and learn style profiles |
+| `POST /api/calibrate` | Run a refusal calibration set |
+
+`POST /api/course` streams modules as each one completes, so the reader can
+start on the first while the rest are still being written. Events arrive out of
+order — whichever module finishes first is sent first — and each carries an
+`index` for the client to place it by. Event types: `planning`, `syllabus`,
+`ingesting`, `ingested`, `module`, `module_error`, `done`, `error`. A failure
+mid-stream arrives as an `error` event rather than an HTTP status, since the
+headers are long gone by then.
+
+Observed locally on a warm corpus: syllabus at 4s, first module at 41s, all four
+modules and final usage at 52s. Streaming buys 11 seconds of perceived latency
+here. The larger win would be token-level streaming within a module, which needs
+the generation call itself to stream and is not wired up yet — a module still
+takes about 40 seconds to appear.
+
 ## How it works
 
 Three lanes, separated by whether they are allowed to block the user:
