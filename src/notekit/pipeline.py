@@ -209,6 +209,7 @@ def run_course(
     skip_ingest: bool = False,
     syllabus: Syllabus | None = None,
     with_quiz: bool = False,
+    namespace: str | None = None,
 ) -> tuple[Syllabus, list[ModuleNotes]]:
     """Plan, ensure the corpus exists, then run every module concurrently.
 
@@ -220,7 +221,13 @@ def run_course(
     cfg = cfg or config.EMBEDDING
 
     syllabus = syllabus or plan_syllabus(goal)
-    namespace = syllabus.topic_slug
+
+    # An explicit namespace means "build this course only from what is already
+    # in here" — the uploaded-material path. Fetching from open sources would
+    # defeat the point, so it is skipped.
+    if namespace:
+        skip_ingest = True
+    namespace = namespace or syllabus.topic_slug
 
     if not skip_ingest:
         summary = ingest.ingest_topic(

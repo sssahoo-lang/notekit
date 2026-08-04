@@ -13,7 +13,7 @@ source material, with every claim cited back to the passage it came from.
 | 1. Core loop — ingest, retrieve, generate cited notes | working end to end |
 | 2. Eval layer — faithfulness, coverage, refusal calibration | working; Langfuse tracing not yet wired |
 | 3. Quiz generation | working; does not yet reuse the notes cache |
-| 4. Upload adapter + style-matched notes | not started |
+| 4. Upload adapter + per-user namespaces | working; style-matching not started |
 | 5. Open-domain routing | not started |
 | 6. Next.js UI | not started |
 | 7. Deploy | not started |
@@ -91,6 +91,11 @@ uv run notekit search "how does the Bellman equation define the Q function" -n q
 uv run notekit course "teach me Q-learning at an intermediate level"
 
 uv run notekit stats q-learning
+
+# Build a course from your own files instead of open sources. No API key
+# needed to index them; PDFs, .txt and .md are supported.
+uv run notekit upload ~/Documents/lecture-notes --user sriya --topic ml
+uv run notekit course "teach me how neural networks are trained" -n user-sriya-ml
 
 # Save a syllabus as a fixture, so evaluation runs are comparable.
 uv run notekit plan "teach me Q-learning" --save fixtures/q-learning.json
@@ -178,8 +183,14 @@ per-user isolation as the corpus itself.
   still calibrate it properly against deliberate out-of-corpus questions.
 - Topic canonicalisation relies on the planner emitting a consistent slug. Close
   variants may still fragment the corpus across namespaces.
-- Single-user. There is no auth and no per-user namespace isolation yet; that
-  arrives with the upload adapter in milestone 4.
+- **Uploads are isolated, but not access-controlled.** Each user's files go into
+  their own namespace and retrieval cannot cross namespaces, which is verified:
+  querying one user's namespace never returns another's chunks. But there is no
+  auth, so `--user` is taken on trust. Anyone who can run the CLI can name any
+  user id. This is isolation, not security, and it needs real authentication
+  before the system is exposed to more than one person.
+- Scanned or image-only PDFs are rejected with a clear message rather than
+  indexed empty. OCR is not wired up yet.
 - PDF parsing is a first pass (`PyMuPDFParser`). It strips reference sections and
   rejoins hyphenated line breaks, but inline math and table content survive as
   noisy text. The parser sits behind a Protocol so it can be replaced without

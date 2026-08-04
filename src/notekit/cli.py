@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
-from . import calibration, config, db, evaluation, ingest, llm, retrieval
+from . import calibration, config, db, evaluation, ingest, llm, retrieval, upload
 from .adapters import DEFAULT_ADAPTERS
 from .models import Syllabus
 from .pipeline import plan_syllabus, run_course
@@ -69,15 +69,18 @@ def course_cmd(
     limit: int = typer.Option(10, help="Maximum documents to ingest if the topic is new"),
     skip_ingest: bool = typer.Option(False, help="Assume the corpus already exists"),
     quiz: bool = typer.Option(False, help="Also generate a quiz per module"),
+    namespace: str = typer.Option(
+        None, "--namespace", "-n", help="Build only from this namespace (e.g. uploads)"
+    ),
 ) -> None:
     """Plan a syllabus and write cited notes for every module."""
     llm.reset_usage()
     syllabus, notes = run_course(
-        goal, limit=limit, skip_ingest=skip_ingest, with_quiz=quiz
+        goal, limit=limit, skip_ingest=skip_ingest, with_quiz=quiz, namespace=namespace
     )
 
     console.print(f"\n[bold]{syllabus.summary}[/]")
-    console.print(f"[dim]namespace: {syllabus.topic_slug}[/]\n")
+    console.print(f"[dim]namespace: {namespace or syllabus.topic_slug}[/]\n")
 
     for module in notes:
         console.rule(f"[bold]{module.module_title}")
@@ -108,6 +111,38 @@ def course_cmd(
             console.print()
 
     _print_usage()
+
+
+@app.command("upload")
+def upload_cmd(
+    paths: list[str] = typer.Argument(..., help="Files or directories to index"),
+    user: str = typer.Option(..., "--user", "-u", help="User id owning this material"),
+    topic: str = typer.Option("notes", help="Namespace suffix within this user"),
+) -> None:
+    """Index your own files into a private namespace. Needs no API key."""
+    namespace = upload.user_namespace(user, topic)
+    console.print(f"[dim]namespace: {namespace}[/]")
+
+    try:
+        summary = upload.ingest_files(paths, namespace=namespace)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(1) from exc
+
+    if not summary["files"]:
+        console.print("[yellow]No supported files found.[/]")
+        raise typer.Exit(1)
+
+    console.print(
+        f"[green]Indexed[/] {summary['new_documents']} of {summary['files']} files, "
+        f"{summary['new_chunks']} chunks."
+    )
+    for reason in summary["skipped"]:
+        # Two prints: the label needs markup, the reason must not be parsed as
+        # markup since filenames and messages can contain square brackets.
+        console.print("  [yellow]skipped[/] ", end="")
+        console.print(reason, markup=False, highlight=False)
+    console.print(f"\nBuild a course from it:\n  notekit course \"...\" -n {namespace}")
 
 
 @app.command("plan")
