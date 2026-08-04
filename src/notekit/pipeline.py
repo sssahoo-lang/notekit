@@ -10,9 +10,9 @@ decide.
 
 from __future__ import annotations
 
-import queue
+import asyncio
 import re
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 
 from . import config, embedding, ingest, llm, retrieval
@@ -188,101 +188,6 @@ def generate_module_notes(
     )
 
 
-def stream_module_notes(
-    module: Module,
-    *,
-    namespace: str,
-    cfg: config.RetrievalConfig | None = None,
-    with_quiz: bool = False,
-    style: StyleProfile | None = None,
-) -> Iterator[dict]:
-    """Same work as `generate_module_notes`, emitted as it is written.
-
-    Yields `token` events while the notes generate, then one terminal `module`
-    event carrying the complete `ModuleNotes`. A client can render the prose as
-    it arrives and replace it with the final object for citations and quiz.
-    """
-    cfg = cfg or config.EMBEDDING
-    chunks = retrieval.retrieve_multi(
-        [module.query, *module.learning_goals], namespace=namespace, cfg=cfg
-    )
-
-    refusal = _refusal_for(module, chunks)
-    if refusal:
-        yield {"type": "module", "notes": refusal.model_dump()}
-        return
-
-    goals = "\n".join(f"- {g}" for g in module.learning_goals)
-    passages = f"Source passages:\n\n{_format_passages(chunks)}"
-    style_instruction = f"\n\n{style.as_instruction()}" if style else ""
-
-    deltas = llm.stream_complete(
-        model=config.GENERATION_MODEL,
-        system=_GROUNDING_SYSTEM,
-        cached_prefix=passages,
-        prompt=(
-            f"Module: {module.title}\n\n"
-            f"The reader should come away able to:\n{goals}\n\n"
-            f"{_NOTES_TASK}{style_instruction}"
-        ),
-        max_tokens=config.MAX_TOKENS_NOTES,
-    )
-
-    # A refusal announces itself only in the first word, so hold back the
-    # opening until there is enough text to tell. Emitting first and retracting
-    # later would flash discarded prose at the reader.
-    body = ""
-    holding = True
-    for delta in deltas:
-        body += delta
-        if holding:
-            if len(body) < len(_REFUSAL_MARKER):
-                continue
-            holding = False
-            if body.startswith(_REFUSAL_MARKER):
-                # Drain the rest silently; it is a refusal, not notes.
-                for rest in deltas:
-                    body += rest
-                break
-            yield {"type": "token", "text": body}
-        else:
-            yield {"type": "token", "text": delta}
-
-    if body.strip().startswith(_REFUSAL_MARKER):
-        reason = body.strip().removeprefix(_REFUSAL_MARKER).strip()
-        yield {
-            "type": "module",
-            "notes": ModuleNotes(
-                module_title=module.title,
-                body="",
-                cited_chunk_ids=[],
-                chunks=chunks,
-                refused=True,
-                refusal_reason=reason.split("\n", 1)[0].lstrip(": ").strip(),
-            ).model_dump(),
-        }
-        return
-
-    retrieved_ids = {c.id for c in chunks}
-    cited = [int(m) for m in _CITATION.findall(body)]
-    invalid = sorted(set(cited) - retrieved_ids)
-    if invalid:
-        raise RuntimeError(f"Notes cited chunks that were never retrieved: {invalid}")
-
-    quiz = generate_quiz(module, chunks, passages=passages) if with_quiz else None
-
-    yield {
-        "type": "module",
-        "notes": ModuleNotes(
-            module_title=module.title,
-            body=body,
-            cited_chunk_ids=sorted(set(cited)),
-            chunks=chunks,
-            quiz=quiz,
-        ).model_dump(),
-    }
-
-
 def generate_quiz(
     module: Module,
     chunks: list[Chunk],
@@ -312,7 +217,122 @@ def generate_quiz(
     return quiz
 
 
-def run_course_events(
+async def astream_module_notes(
+    module: Module,
+    *,
+    namespace: str,
+    cfg: config.RetrievalConfig | None = None,
+    with_quiz: bool = False,
+    style: StyleProfile | None = None,
+) -> AsyncIterator[dict]:
+    """Same work as `generate_module_notes`, emitted as it is written.
+
+    Yields `token` events while the notes generate, then one terminal `module`
+    event carrying the complete `ModuleNotes`. A client renders the prose as it
+    arrives and swaps in the final object for citations and quiz.
+    """
+    cfg = cfg or config.EMBEDDING
+
+    # Retrieval is CPU-bound torch work behind a lock, so it goes to a thread
+    # rather than blocking the event loop the other modules are streaming on.
+    chunks = await asyncio.to_thread(
+        retrieval.retrieve_multi,
+        [module.query, *module.learning_goals],
+        namespace=namespace,
+        cfg=cfg,
+    )
+
+    refusal = _refusal_for(module, chunks)
+    if refusal:
+        yield {"type": "module", "notes": refusal.model_dump()}
+        return
+
+    goals = "\n".join(f"- {g}" for g in module.learning_goals)
+    passages = f"Source passages:\n\n{_format_passages(chunks)}"
+    style_instruction = f"\n\n{style.as_instruction()}" if style else ""
+
+    body = ""
+    holding = True
+    suppressed = False
+
+    async for delta in llm.astream_complete(
+        model=config.GENERATION_MODEL,
+        system=_GROUNDING_SYSTEM,
+        cached_prefix=passages,
+        prompt=(
+            f"Module: {module.title}\n\n"
+            f"The reader should come away able to:\n{goals}\n\n"
+            f"{_NOTES_TASK}{style_instruction}"
+        ),
+        max_tokens=config.MAX_TOKENS_NOTES,
+    ):
+        body += delta
+        if holding:
+            # A refusal announces itself only in the first word. Hold the
+            # opening back until there is enough text to tell; emitting first
+            # and retracting would flash discarded prose at the reader.
+            if len(body) < len(_REFUSAL_MARKER):
+                continue
+            holding = False
+            suppressed = body.startswith(_REFUSAL_MARKER)
+            if not suppressed:
+                yield {"type": "token", "text": body}
+        elif not suppressed:
+            yield {"type": "token", "text": delta}
+
+    if body.strip().startswith(_REFUSAL_MARKER):
+        reason = body.strip().removeprefix(_REFUSAL_MARKER).strip()
+        yield {
+            "type": "module",
+            "notes": ModuleNotes(
+                module_title=module.title,
+                body="",
+                cited_chunk_ids=[],
+                chunks=chunks,
+                refused=True,
+                refusal_reason=reason.split("\n", 1)[0].lstrip(": ").strip(),
+            ).model_dump(),
+        }
+        return
+
+    retrieved_ids = {c.id for c in chunks}
+    cited = [int(m) for m in _CITATION.findall(body)]
+    invalid = sorted(set(cited) - retrieved_ids)
+    if invalid:
+        raise RuntimeError(f"Notes cited chunks that were never retrieved: {invalid}")
+
+    quiz = None
+    if with_quiz:
+        quiz = await agenerate_quiz(module, chunks, passages=passages)
+
+    yield {
+        "type": "module",
+        "notes": ModuleNotes(
+            module_title=module.title,
+            body=body,
+            cited_chunk_ids=sorted(set(cited)),
+            chunks=chunks,
+            quiz=quiz,
+        ).model_dump(),
+    }
+
+
+async def agenerate_quiz(
+    module: Module, chunks: list[Chunk], *, passages: str | None = None, n: int = 3
+) -> Quiz:
+    quiz = await llm.aparse(
+        model=config.GENERATION_MODEL,
+        system=_GROUNDING_SYSTEM,
+        cached_prefix=passages or f"Source passages:\n\n{_format_passages(chunks)}",
+        prompt=f"Module: {module.title}\n\n{_QUIZ_TASK.format(n=n)}",
+        max_tokens=config.MAX_TOKENS_QUIZ,
+        schema=Quiz,
+    )
+    quiz.questions = [q for q in quiz.questions if 0 <= q.answer_index < len(q.options)]
+    return quiz
+
+
+async def arun_course_events(
     goal: str,
     *,
     limit: int = 10,
@@ -322,17 +342,17 @@ def run_course_events(
     with_quiz: bool = False,
     namespace: str | None = None,
     style: StyleProfile | None = None,
-) -> Iterator[dict]:
-    """Same work as `run_course`, yielded as it completes.
+) -> AsyncIterator[dict]:
+    """Plan, then stream every module concurrently as coroutines.
 
-    Modules are emitted the moment each finishes rather than after all of them
-    do, so a reader can start on module one while the rest are still being
-    written. This is the whole reason the module loop runs concurrently.
+    Modules run on one event loop rather than in a thread pool. Streaming is
+    I/O-bound but its SSE parsing is Python work, so threads contended on the
+    GIL and staggered each other's first token by seconds; coroutines do not.
     """
     cfg = cfg or config.EMBEDDING
 
     yield {"type": "planning"}
-    syllabus = syllabus or plan_syllabus(goal)
+    syllabus = syllabus or await asyncio.to_thread(plan_syllabus, goal)
 
     if namespace:
         skip_ingest = True
@@ -347,7 +367,8 @@ def run_course_events(
 
     if not skip_ingest:
         yield {"type": "ingesting", "namespace": namespace}
-        summary = ingest.ingest_topic(
+        summary = await asyncio.to_thread(
+            ingest.ingest_topic,
             slug=syllabus.topic_slug,
             query=[
                 syllabus.topic_slug.replace("-", " "),
@@ -357,47 +378,53 @@ def run_course_events(
             limit=limit,
             cfg=cfg,
         )
-        yield {"type": "ingested", "cached": summary.get("cached", False),
-               "chunks": summary.get("chunks", 0)}
+        yield {
+            "type": "ingested",
+            "cached": summary.get("cached", False),
+            "chunks": summary.get("chunks", 0),
+        }
 
-    embedding.warm(cfg)
+    await asyncio.to_thread(embedding.warm, cfg)
 
     for index, module in enumerate(syllabus.modules):
         yield {"type": "module_start", "index": index, "title": module.title}
 
-    # Modules generate concurrently and each emits its own token stream, so the
-    # worker threads publish into one queue that this generator drains. Every
-    # event carries its module index; a client routes tokens by that, since
-    # events from different modules interleave.
-    events: queue.Queue = queue.Queue()
-    remaining = len(syllabus.modules)
+    events: asyncio.Queue = asyncio.Queue()
+    limiter = asyncio.Semaphore(config.MAX_PARALLEL_MODULES)
 
-    def worker(index: int, module: Module) -> None:
+    async def worker(index: int, module: Module) -> None:
         try:
-            for event in stream_module_notes(
-                module,
-                namespace=namespace,
-                cfg=cfg,
-                with_quiz=with_quiz,
-                style=style,
-            ):
-                events.put({**event, "index": index})
+            async with limiter:
+                async for event in astream_module_notes(
+                    module,
+                    namespace=namespace,
+                    cfg=cfg,
+                    with_quiz=with_quiz,
+                    style=style,
+                ):
+                    await events.put({**event, "index": index})
         except Exception as exc:  # noqa: BLE001
             # One failed module must not lose the others already written.
-            events.put({"type": "module_error", "index": index, "error": str(exc)})
+            await events.put({"type": "module_error", "index": index, "error": str(exc)})
         finally:
-            events.put({"type": "_worker_done"})
+            await events.put({"type": "_worker_done"})
 
-    with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_MODULES) as pool:
-        for index, module in enumerate(syllabus.modules):
-            pool.submit(worker, index, module)
-
+    tasks = [
+        asyncio.create_task(worker(i, m)) for i, m in enumerate(syllabus.modules)
+    ]
+    remaining = len(syllabus.modules)
+    try:
         while remaining:
-            event = events.get()
+            event = await events.get()
             if event["type"] == "_worker_done":
                 remaining -= 1
                 continue
             yield event
+    finally:
+        # A client that disconnects mid-stream must not leave modules generating.
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     entries, cost = llm.usage_report()
     yield {

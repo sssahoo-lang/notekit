@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from typing import TypeVar
 
 import anthropic
@@ -20,6 +20,12 @@ from . import config
 from .models import Usage
 
 _client = anthropic.Anthropic()
+
+# Generation is I/O-bound, so the streaming path runs on the async client.
+# Threads were measurably worse: four worker threads each parsing their own SSE
+# stream is GIL-bound work, and their first tokens staggered by 6s where four
+# coroutines on one event loop do not contend at all.
+_aclient = anthropic.AsyncAnthropic()
 _lock = threading.Lock()
 _usage: dict[str, Usage] = defaultdict(lambda: Usage(model="unknown"))
 
@@ -50,6 +56,20 @@ def usage_report() -> tuple[list[Usage], float]:
     return entries, total
 
 
+def _content_blocks(prompt: str, cached_prefix: str | None) -> list[dict]:
+    content: list[dict] = []
+    if cached_prefix:
+        content.append(
+            {
+                "type": "text",
+                "text": cached_prefix,
+                "cache_control": {"type": "ephemeral"},
+            }
+        )
+    content.append({"type": "text", "text": prompt})
+    return content
+
+
 def complete(
     *,
     model: str,
@@ -64,16 +84,7 @@ def complete(
     retrieved passages). Marking it cacheable means the quiz call re-reads it at
     a tenth of the input price instead of paying for it twice.
     """
-    content: list[dict] = []
-    if cached_prefix:
-        content.append(
-            {
-                "type": "text",
-                "text": cached_prefix,
-                "cache_control": {"type": "ephemeral"},
-            }
-        )
-    content.append({"type": "text", "text": prompt})
+    content = _content_blocks(prompt, cached_prefix)
 
     response = _client.messages.create(
         model=model,
@@ -89,41 +100,54 @@ def complete(
     return "".join(b.text for b in response.content if b.type == "text")
 
 
-def stream_complete(
+async def astream_complete(
     *,
     model: str,
     system: str,
     prompt: str,
     max_tokens: int,
     cached_prefix: str | None = None,
-) -> Iterator[str]:
+) -> AsyncIterator[str]:
     """Yield text deltas as they arrive. Usage is recorded when the stream ends."""
-    content: list[dict] = []
-    if cached_prefix:
-        content.append(
-            {
-                "type": "text",
-                "text": cached_prefix,
-                "cache_control": {"type": "ephemeral"},
-            }
-        )
-    content.append({"type": "text", "text": prompt})
-
     extra = {"thinking": config.GENERATION_THINKING} if config.GENERATION_THINKING else {}
 
-    with _client.messages.stream(
+    async with _aclient.messages.stream(
         model=model,
         max_tokens=max_tokens,
         system=system,
-        messages=[{"role": "user", "content": content}],
+        messages=[{"role": "user", "content": _content_blocks(prompt, cached_prefix)}],
         **extra,
     ) as stream:
-        yield from stream.text_stream
-        final = stream.get_final_message()
+        async for text in stream.text_stream:
+            yield text
+        final = await stream.get_final_message()
 
     _record(model, final.usage)
     if final.stop_reason == "refusal":
         raise RuntimeError(f"Model declined the request: {final.stop_details}")
+
+
+async def aparse(
+    *,
+    model: str,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    schema: type[T],
+    cached_prefix: str | None = None,
+) -> T:
+    response = await _aclient.messages.parse(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": _content_blocks(prompt, cached_prefix)}],
+        output_format=schema,
+    )
+    _record(model, response.usage)
+
+    if response.parsed_output is None:
+        raise RuntimeError(f"Structured output failed (stop_reason={response.stop_reason})")
+    return response.parsed_output
 
 
 def parse(
@@ -136,16 +160,7 @@ def parse(
     cached_prefix: str | None = None,
 ) -> T:
     """A completion constrained to a pydantic schema."""
-    content: list[dict] = []
-    if cached_prefix:
-        content.append(
-            {
-                "type": "text",
-                "text": cached_prefix,
-                "cache_control": {"type": "ephemeral"},
-            }
-        )
-    content.append({"type": "text", "text": prompt})
+    content = _content_blocks(prompt, cached_prefix)
 
     response = _client.messages.parse(
         model=model,

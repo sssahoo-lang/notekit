@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import tempfile
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from . import calibration, db, llm, retrieval, style, upload
 from .models import Syllabus
-from .pipeline import plan_syllabus, run_course_events
+from .pipeline import arun_course_events, plan_syllabus
 
 app = FastAPI(title="NoteKit", version="0.1.0")
 
@@ -47,14 +47,18 @@ class StyleLearnRequest(BaseModel):
     sample: str
 
 
-def _sse(events: Iterator[dict]) -> Iterator[str]:
+async def _sse(events: AsyncIterator[dict]) -> AsyncIterator[str]:
     """Serialise events as SSE frames.
+
+    Async all the way through: handing StreamingResponse a sync generator makes
+    Starlette hop to a worker thread for every single item, which for
+    token-level output is thousands of hops per course.
 
     A failure mid-stream cannot become an HTTP error status — headers are long
     gone — so it is delivered as a terminal error event instead.
     """
     try:
-        for event in events:
+        async for event in events:
             yield f"data: {json.dumps(event, default=str)}\n\n"
     except Exception as exc:  # noqa: BLE001
         yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
@@ -96,7 +100,7 @@ def course(request: CourseRequest) -> StreamingResponse:
     profile = style.load(request.user) if request.user else None
     llm.reset_usage()
 
-    events = run_course_events(
+    events = arun_course_events(
         request.goal,
         limit=request.limit,
         skip_ingest=request.skip_ingest,

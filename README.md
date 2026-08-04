@@ -131,26 +131,36 @@ terminal `module` event carrying the complete object with citations and quiz. A
 client renders tokens as they land and swaps in the final object when it
 arrives.
 
-Latency is dominated by the model's thinking phase, not by retrieval or by the
-transport. Measured on a warm corpus:
+Modules stream as coroutines on one event loop, not as worker threads. That
+distinction is worth 2.8x on time-to-first-prose:
 
-| Stage | Time |
-|---|---|
-| Retrieval, all four modules | 3.9s |
-| First text, thinking on (isolated call) | 2.9s |
-| First text, thinking disabled | 0.9s |
-| First prose end to end, four modules concurrent | ~52s |
+| | Threads | Async |
+|---|---|---|
+| First prose | 52.3s | **18.4s** |
+| Stagger between modules' first tokens | ~35s | **7.6s** |
+| Whole course, four modules | 82.8s | **41.2s** |
 
-The gap between an isolated 2.9s and ~52s under four-way concurrency is not yet
-explained, and the honest position is that token streaming has not yet delivered
-the win it was meant to: first prose arrived later than the previous
-module-level stream produced a whole first module. `config.GENERATION_THINKING`
-exposes the one lever measured so far — setting it to `{"type": "disabled"}`
-cuts first text to 0.9s, at the cost of a generation path whose faithfulness
-would need re-measuring against the fixture.
+Streaming is I/O-bound, but parsing its SSE frames is Python work. Four threads
+each parsing their own stream contended on the GIL and staggered each other's
+first token by tens of seconds; coroutines on one loop do not contend. Retrieval
+stays on a thread via `asyncio.to_thread`, because that genuinely is CPU-bound
+torch work and would otherwise block every other module's stream.
 
-Note also that deltas are coarse: about 51 events for a 5,800-character module,
-so roughly 114 characters per event rather than per-token.
+Getting there meant measuring rather than guessing. Retrieval was not the cause
+(all four modules retrieve in 3.9s), and neither was the API (four raw
+concurrent streams reach first token in 0.76–2.33s). Two things were: thread
+contention, and `MAX_TOKENS_NOTES = 4000` — given room for 4,000 tokens the
+model writes about 5,800 characters, and a single module takes 37s to generate
+against 8.7s at `max_tokens=700`. Most of the remaining wait is the notes being
+long, not anything being slow.
+
+Two levers remain, both unmeasured for quality impact: lowering
+`MAX_TOKENS_NOTES` shortens notes and wait proportionally, and
+`config.GENERATION_THINKING = {"type": "disabled"}` cuts time-to-first-text from
+2.9s to 0.9s. Either changes the generation path and needs faithfulness
+re-measured against the fixture.
+
+Deltas are coarse: roughly 114 characters per event rather than per-token.
 
 ## How it works
 
