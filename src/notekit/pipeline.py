@@ -41,6 +41,10 @@ naming what is missing. Write nothing else — no partial notes, no "here is wha
 the passages do cover". Refusing cleanly is the correct answer, not a fallback.
 4. Do not use outside knowledge, even where you are confident it is correct.
 
+5. Address every stated learning goal that the passages support, in order. \
+Where the passages support a goal only partly, cover what they do support and \
+say briefly what is missing. Do not skip a goal in silence.
+
 Write for an intermediate learner: prose with short paragraphs, no headings, \
 no preamble, no closing summary."""
 
@@ -67,7 +71,12 @@ def generate_module_notes(
 ) -> ModuleNotes:
     """Per-module loop body: retrieve, rerank, generate cited notes."""
     cfg = cfg or config.EMBEDDING
-    chunks = retrieval.retrieve(query=module.query, namespace=namespace, cfg=cfg)
+    # Retrieve for the module query and for each learning goal. Retrieving only
+    # on the module query gave notes that were faithful but addressed barely
+    # half the stated goals, because generation can only cover what it is shown.
+    chunks = retrieval.retrieve_multi(
+        [module.query, *module.learning_goals], namespace=namespace, cfg=cfg
+    )
 
     if not chunks:
         return ModuleNotes(
@@ -152,7 +161,10 @@ def run_course(
     if not skip_ingest:
         summary = ingest.ingest_topic(
             slug=syllabus.topic_slug,
-            query=syllabus.topic_slug.replace("-", " "),
+            query=[
+                syllabus.topic_slug.replace("-", " "),
+                *(m.query for m in syllabus.modules),
+            ],
             namespace=namespace,
             limit=limit,
             cfg=cfg,

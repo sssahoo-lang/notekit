@@ -93,3 +93,8 @@ DATABASE_URL = os.environ.get(
 )
 
 MAX_PARALLEL_MODULES = 4
+
+# A module retrieves once for its own query and once per learning goal, then
+# merges the results. This caps the merged set: more context raises coverage but
+# costs input tokens and dilutes the reranked ordering.
+MAX_CONTEXT_CHUNKS = 14

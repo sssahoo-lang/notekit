@@ -13,33 +13,45 @@ from .adapters import DEFAULT_ADAPTERS, REGISTRY
 def ingest_topic(
     *,
     slug: str,
-    query: str,
+    query: str | list[str],
     namespace: str,
     adapter_names: list[str] | None = None,
     limit: int = 10,
     cfg: config.RetrievalConfig | None = None,
     force: bool = False,
 ) -> dict:
-    """Populate a namespace for one topic. Returns a summary dict."""
+    """Populate a namespace for one topic. Returns a summary dict.
+
+    `query` may be a list. Fetching per module query rather than on the topic
+    alone is what gives each module material to work from: a corpus assembled
+    from "q-learning" answers the topic broadly but leaves specific modules
+    thin, which shows up later as low coverage.
+    """
     cfg = cfg or config.EMBEDDING
     adapter_names = adapter_names or DEFAULT_ADAPTERS
+    queries = [query] if isinstance(query, str) else list(dict.fromkeys(query))
 
     with db.connect() as conn:
         if not force and db.topic_is_ingested(conn, slug):
             stats = db.namespace_stats(conn, namespace)
             return {"cached": True, **stats}
 
+    # `limit` is the budget for the whole topic, split across queries, so adding
+    # modules does not multiply fetch time (arXiv wants 3s between requests).
+    per_query = max(2, limit // len(queries))
+
     fetched: list[tuple[str, object]] = []
     for name in adapter_names:
         adapter = REGISTRY[name]
-        print(f"Fetching up to {limit} documents from {name} for '{query}'...")
-        try:
-            for doc in adapter.fetch(query, limit):
-                fetched.append((adapter.name, doc))
-        except Exception as exc:  # noqa: BLE001
-            # One unreachable source should not lose the material from the
-            # others — a partial corpus still produces grounded notes.
-            print(f"  ! {name} failed: {exc}")
+        print(f"Fetching from {name}: {len(queries)} queries x {per_query} docs...")
+        for q in queries:
+            try:
+                for doc in adapter.fetch(q, per_query):
+                    fetched.append((adapter.name, doc))
+            except Exception as exc:  # noqa: BLE001
+                # One unreachable source should not lose the material from the
+                # others — a partial corpus still produces grounded notes.
+                print(f"  ! {name} failed on '{q[:40]}': {exc}")
 
     total_chunks = 0
     new_documents = 0

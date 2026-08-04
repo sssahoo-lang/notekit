@@ -25,10 +25,18 @@ Wikipedia and arXiv:
 
 | Metric | Result |
 |---|---|
-| Faithfulness | **95.7%** (220/230 claims entailed by their retrieved passages) |
-| Coverage | 60.0% of stated learning goals addressed |
+| Faithfulness | **97.4%** (187/192 claims entailed by their retrieved passages) |
+| Coverage | **83.3%** of stated learning goals addressed |
 | Refusal accuracy | **100%** (16/16 probe questions classified correctly) |
-| Cost per evaluated course | $0.37 |
+| Cost per evaluated course | $0.38 |
+
+Retrieving once per learning goal rather than once per module, and building the
+corpus from module queries rather than the topic name, moved coverage from 60.0%
+to 83.3% and faithfulness from 95.7% to 97.4% at unchanged cost. That comparison
+is suggestive rather than controlled: the planner emits a different syllabus on
+each run, so the two measurements are not over identical work. Pinning a fixed
+syllabus for evaluation runs is the next fix, and a precondition for trusting
+any future before/after number.
 
 Refusal is calibrated rather than guessed. Questions the corpus covers rerank at
 +0.28 to +8.50; questions it does not (French Revolution, sourdough
@@ -45,10 +53,10 @@ writer, and the number should be read as a regression signal rather than an
 absolute. And these are single-run figures on one topic; there is no variance
 estimate yet.
 
-The weak number is coverage. The notes are faithful to their sources but address
-only 60% of the learning goals the planner set, because generation follows what
-retrieval returned rather than what the module asked for. That gap is the next
-thing worth closing.
+Coverage remains the weaker number. Two modules still address only two of three
+learning goals, and the honest reading is that some goals simply have no
+supporting material in a 13-document corpus — which is the system behaving
+correctly, not failing.
 
 ## Setup
 

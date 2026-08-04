@@ -54,6 +54,35 @@ def retrieve(
     ]
 
 
+def retrieve_multi(
+    queries: list[str],
+    *,
+    namespace: str,
+    cfg: config.RetrievalConfig | None = None,
+    limit: int | None = None,
+) -> list[Chunk]:
+    """Retrieve for several related queries and merge the results.
+
+    A module asks one question, but its learning goals ask several more specific
+    ones. Retrieving once per goal and merging is what lets generation address
+    every goal rather than only the parts the module query happened to surface.
+
+    Each chunk keeps its best score across queries, so a passage that is highly
+    relevant to one goal is not buried by being irrelevant to the others.
+    """
+    cfg = cfg or config.EMBEDDING
+    limit = limit or config.MAX_CONTEXT_CHUNKS
+
+    best: dict[int, Chunk] = {}
+    for query in queries:
+        for chunk in retrieve(query=query, namespace=namespace, cfg=cfg):
+            existing = best.get(chunk.id)
+            if existing is None or chunk.score > existing.score:
+                best[chunk.id] = chunk
+
+    return sorted(best.values(), key=lambda c: c.score, reverse=True)[:limit]
+
+
 def _reciprocal_rank_fusion(*result_lists: list[dict]) -> list[dict]:
     """Merge ranked lists by rank position rather than by raw score.
 
