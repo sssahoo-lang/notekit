@@ -13,7 +13,7 @@ source material, with every claim cited back to the passage it came from.
 | 1. Core loop — ingest, retrieve, generate cited notes | working end to end |
 | 2. Eval layer — faithfulness, coverage, refusal calibration | working; Langfuse tracing not yet wired |
 | 3. Quiz generation | not started |
-| 4. Upload adapter | not started |
+| 4. Upload adapter + style-matched notes | not started |
 | 5. Open-domain routing | not started |
 | 6. Next.js UI | not started |
 | 7. Deploy | not started |
@@ -117,6 +117,39 @@ Three lanes, separated by whether they are allowed to block the user:
 
 Configuration — model tiers, chunking, retrieval parameters, the refusal
 threshold — lives in `src/notekit/config.py`.
+
+## Planned: style-matched notes (milestone 4)
+
+When a user uploads their own notes, the system should write in the register
+they already use — their vocabulary, their density, prose or bullets. Notes that
+read like your own are easier to absorb than notes that read like a textbook.
+
+The design constraint is that this must not cost grounding. Pasting someone's
+notes into the generation prompt as a style exemplar puts a block of
+content-shaped text next to the retrieved passages, and the model will sometimes
+assert things from it — the exact failure the faithfulness metric exists to
+catch.
+
+So style and content stay separate. At upload time, a `StyleProfile` is
+extracted once: sentence length, prose versus bullets, formality, use of
+analogies or worked examples, notation preference, domain shorthand the writer
+already uses. Generation receives that profile and never the source text. Facts
+can only enter through retrieved passages; style enters as a description of
+form.
+
+This is testable with machinery that already exists. Run a fixed syllabus with
+and without a profile and compare faithfulness across repeats. The claim worth
+making is not "it adapts to your writing style" but "personalisation cost N
+points of faithfulness, measured".
+
+One distinction is deliberate. Matching how someone *writes* is in scope.
+Matching how someone *understands* is not: student notes often contain
+misconceptions, and a system that mirrors them would reinforce errors while
+citing correct sources — grounded-looking and wrong. Difficulty is controlled by
+the level in the learning goal, which stays independent of style.
+
+Uploaded notes are personal data. Profiles derived from them fall under the same
+per-user isolation as the corpus itself.
 
 ## Known limitations
 
