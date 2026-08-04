@@ -23,20 +23,31 @@ source material, with every claim cited back to the passage it came from.
 One course on Q-learning, five modules, over a corpus of 13 documents drawn from
 Wikipedia and arXiv:
 
+Measured over a fixed syllabus (`fixtures/q-learning.json`, 4 modules, 12
+learning goals) against a 13-document corpus drawn from Wikipedia and arXiv:
+
 | Metric | Result |
 |---|---|
-| Faithfulness | **97.4%** (187/192 claims entailed by their retrieved passages) |
-| Coverage | **83.3%** of stated learning goals addressed |
+| Faithfulness | **97–99%** (97.3% and 98.8% over two runs) |
 | Refusal accuracy | **100%** (16/16 probe questions classified correctly) |
-| Cost per evaluated course | $0.38 |
+| Coverage | 42–67% — too noisy to quote as a single figure, see below |
+| Cost per evaluated course | $0.22–0.38 |
 
-Retrieving once per learning goal rather than once per module, and building the
-corpus from module queries rather than the topic name, moved coverage from 60.0%
-to 83.3% and faithfulness from 95.7% to 97.4% at unchanged cost. That comparison
-is suggestive rather than controlled: the planner emits a different syllabus on
-each run, so the two measurements are not over identical work. Pinning a fixed
-syllabus for evaluation runs is the next fix, and a precondition for trusting
-any future before/after number.
+**Coverage is not yet a trustworthy metric.** Two runs of the *same* fixed
+syllabus returned 41.7% and 66.7% — a 25-point swing with nothing changed.
+There are only 12 learning goals in the fixture, so each is worth 8.3 points,
+and the judge is not deterministic. Any single coverage number from this system
+is noise at that scale, and `notekit eval --repeat N` exists to make that
+visible rather than hide it.
+
+This retracts an earlier claim in this README that per-goal retrieval lifted
+coverage from 60% to 83%. Those two measurements came from different
+planner-generated syllabi, and the run-to-run variance turns out to be as large
+as the effect. The change is still defensible on mechanism — generation can only
+address a goal if retrieval surfaced material for it — but it has not been
+measured, and it is not counted as a result here.
+
+Faithfulness is stable across runs and is the number this project stands on.
 
 Refusal is calibrated rather than guessed. Questions the corpus covers rerank at
 +0.28 to +8.50; questions it does not (French Revolution, sourdough
@@ -47,16 +58,11 @@ the threshold sits inside it:
 uv run notekit calibrate evalsets/q-learning.json
 ```
 
-Two caveats worth stating plainly. Faithfulness is judged by Haiku against notes
-written by Sonnet — same model family, so the grader shares blind spots with the
-writer, and the number should be read as a regression signal rather than an
-absolute. And these are single-run figures on one topic; there is no variance
-estimate yet.
-
-Coverage remains the weaker number. Two modules still address only two of three
-learning goals, and the honest reading is that some goals simply have no
-supporting material in a 13-document corpus — which is the system behaving
-correctly, not failing.
+One caveat applies to every number above: faithfulness is judged by Haiku
+against notes written by Sonnet. Same model family, so the grader shares blind
+spots with the writer, and the figure is better read as a regression signal than
+as ground truth. An independent judge — a different provider, or spot-checking
+by hand against a labelled set — is the way to establish that properly.
 
 ## Setup
 
@@ -86,8 +92,11 @@ uv run notekit course "teach me Q-learning at an intermediate level"
 
 uv run notekit stats q-learning
 
-# Score a generated course for faithfulness and coverage.
-uv run notekit eval "teach me Q-learning at an intermediate level" --explain
+# Save a syllabus as a fixture, so evaluation runs are comparable.
+uv run notekit plan "teach me Q-learning" --save fixtures/q-learning.json
+
+# Score a course for faithfulness and coverage. Repeat to see the spread.
+uv run notekit eval --syllabus fixtures/q-learning.json --repeat 3 --explain
 
 # Calibrate the refusal threshold. Needs no API key.
 uv run notekit calibrate evalsets/q-learning.json

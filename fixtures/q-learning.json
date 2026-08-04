@@ -1,0 +1,42 @@
+{
+  "topic_slug": "q-learning",
+  "summary": "An intermediate course on Q-learning covering foundational concepts, value iteration algorithms, and practical implementation considerations.",
+  "modules": [
+    {
+      "title": "Markov Decision Processes and Bellman Equations",
+      "query": "Markov decision process MDP Bellman equation value function optimal policy",
+      "learning_goals": [
+        "Explain how Markov decision processes formalize sequential decision-making problems",
+        "Derive and apply the Bellman equation to compute value functions",
+        "Understand the relationship between value functions and optimal policies"
+      ]
+    },
+    {
+      "title": "Dynamic Programming and Value Iteration",
+      "query": "dynamic programming value iteration temporal difference learning control",
+      "learning_goals": [
+        "Distinguish between policy iteration and value iteration algorithms",
+        "Implement value iteration to solve finite MDPs",
+        "Understand how dynamic programming approximates optimal value functions"
+      ]
+    },
+    {
+      "title": "Q-Learning Algorithm and Convergence",
+      "query": "Q-learning off-policy temporal difference control algorithm convergence properties",
+      "learning_goals": [
+        "Explain the Q-learning update rule and how it differs from SARSA",
+        "Understand why Q-learning is an off-policy algorithm",
+        "Analyze convergence conditions and learning rate effects on Q-learning performance"
+      ]
+    },
+    {
+      "title": "Function Approximation and Practical Implementation",
+      "query": "Q-learning function approximation neural networks deep Q-learning convergence",
+      "learning_goals": [
+        "Apply function approximation techniques to handle large state spaces",
+        "Implement Q-learning with linear and nonlinear function approximators",
+        "Identify and mitigate stability issues in practical Q-learning applications"
+      ]
+    }
+  ]
+}

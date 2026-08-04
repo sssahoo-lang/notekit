@@ -151,11 +151,18 @@ def run_course(
     limit: int = 10,
     cfg: config.RetrievalConfig | None = None,
     skip_ingest: bool = False,
+    syllabus: Syllabus | None = None,
 ) -> tuple[Syllabus, list[ModuleNotes]]:
-    """Plan, ensure the corpus exists, then run every module concurrently."""
+    """Plan, ensure the corpus exists, then run every module concurrently.
+
+    Passing `syllabus` skips planning. Evaluation runs must do this: the planner
+    emits a different breakdown each time, so re-planning between two measured
+    runs means they cover different work and any before/after difference
+    conflates the change under test with planner variance.
+    """
     cfg = cfg or config.EMBEDDING
 
-    syllabus = plan_syllabus(goal)
+    syllabus = syllabus or plan_syllabus(goal)
     namespace = syllabus.topic_slug
 
     if not skip_ingest:

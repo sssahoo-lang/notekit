@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
@@ -9,7 +11,8 @@ from rich.table import Table
 
 from . import calibration, config, db, evaluation, ingest, llm, retrieval
 from .adapters import DEFAULT_ADAPTERS
-from .pipeline import run_course
+from .models import Syllabus
+from .pipeline import plan_syllabus, run_course
 
 app = typer.Typer(add_completion=False, help="Grounded course-notes agent")
 console = Console()
@@ -94,6 +97,32 @@ def course_cmd(
     _print_usage()
 
 
+@app.command("plan")
+def plan_cmd(
+    goal: str = typer.Argument(..., help="Learning goal to plan a syllabus for"),
+    save: str = typer.Option(None, help="Write the syllabus to this JSON path"),
+) -> None:
+    """Plan a syllabus and optionally save it as an evaluation fixture."""
+    llm.reset_usage()
+    syllabus = plan_syllabus(goal)
+
+    console.print(f"[bold]{syllabus.summary}[/]")
+    console.print(f"[dim]slug: {syllabus.topic_slug}[/]\n")
+    for i, module in enumerate(syllabus.modules, 1):
+        console.print(f"[bold]{i}. {module.title}[/]")
+        console.print(f"   [dim]query:[/] {module.query}")
+        for goal_text in module.learning_goals:
+            console.print(f"   - {goal_text}")
+
+    if save:
+        path = Path(save)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(syllabus.model_dump_json(indent=2))
+        console.print(f"\n[green]Saved fixture:[/] {save}")
+
+    _print_usage()
+
+
 @app.command("calibrate")
 def calibrate_cmd(
     evalset: str = typer.Argument(..., help="Path to a calibration set JSON"),
@@ -138,15 +167,58 @@ def calibrate_cmd(
 
 @app.command("eval")
 def eval_cmd(
-    goal: str = typer.Argument(..., help="Learning goal to generate and score"),
+    goal: str = typer.Argument("", help="Learning goal (ignored when --syllabus is given)"),
+    syllabus_path: str = typer.Option(
+        None, "--syllabus", help="Fixture JSON from `notekit plan --save`"
+    ),
     skip_ingest: bool = typer.Option(True, help="Assume the corpus already exists"),
     explain: bool = typer.Option(False, help="Print every unsupported claim"),
+    repeat: int = typer.Option(
+        1, help="Run N times and report the spread. Coverage needs this."
+    ),
 ) -> None:
-    """Generate a course, then score it for faithfulness and coverage."""
+    """Generate a course, then score it for faithfulness and coverage.
+
+    Pass --syllabus to hold the plan fixed. Without it the planner re-plans on
+    every run, so two measurements cover different work and cannot be compared.
+
+    Even with a fixed syllabus, coverage varies by tens of points run to run:
+    there are only a handful of learning goals and the judge is not
+    deterministic. Use --repeat before believing any single coverage figure.
+    """
+    if not goal and not syllabus_path:
+        console.print("[red]Give a goal or a --syllabus fixture.[/]")
+        raise typer.Exit(1)
+
+    fixture = (
+        Syllabus.model_validate_json(Path(syllabus_path).read_text())
+        if syllabus_path
+        else None
+    )
+    if fixture:
+        console.print(f"[dim]fixture: {syllabus_path} ({len(fixture.modules)} modules)[/]")
+    else:
+        console.print(
+            "[yellow]No fixture: the planner will re-plan, so this run is not "
+            "comparable with any other.[/]"
+        )
+
     llm.reset_usage()
-    syllabus, notes = run_course(goal, skip_ingest=skip_ingest)
-    results = evaluation.evaluate_course(notes, syllabus.modules)
-    summary = evaluation.aggregate(results)
+
+    runs = []
+    for n in range(repeat):
+        if repeat > 1:
+            console.print(f"[dim]run {n + 1}/{repeat}[/]")
+        syllabus, notes = run_course(goal, skip_ingest=skip_ingest, syllabus=fixture)
+        results = evaluation.evaluate_course(notes, syllabus.modules)
+        runs.append((results, evaluation.aggregate(results)))
+
+    if repeat > 1:
+        _print_spread(runs)
+        _print_usage()
+        return
+
+    results, summary = runs[0]
 
     table = Table(title="Evaluation", title_style="dim")
     for column in ("module", "claims", "supported", "faithfulness", "coverage"):
@@ -195,6 +267,33 @@ def stats_cmd(namespace: str = typer.Argument(...)) -> None:
     with db.connect() as conn:
         stats = db.namespace_stats(conn, namespace)
     console.print(f"{stats['documents']} documents, {stats['chunks']} chunks.")
+
+
+def _print_spread(runs: list) -> None:
+    """Report each metric as mean and range across runs, never as one number."""
+    table = Table(title="Across runs", title_style="dim")
+    for column in ("run", "claims", "faithfulness", "coverage"):
+        table.add_column(column)
+
+    for i, (_, summary) in enumerate(runs, 1):
+        table.add_row(
+            str(i),
+            str(summary["claims"]),
+            f"{summary['faithfulness']:.1%}" if summary["faithfulness"] else "—",
+            f"{summary['coverage']:.1%}" if summary["coverage"] else "—",
+        )
+    console.print(table)
+
+    for label, key in (("faithfulness", "faithfulness"), ("coverage", "coverage")):
+        values = [s[key] for _, s in runs if s[key] is not None]
+        if not values:
+            continue
+        mean = sum(values) / len(values)
+        spread = max(values) - min(values)
+        console.print(
+            f"[bold]{label}[/] {mean:.1%} "
+            f"(range {min(values):.1%}–{max(values):.1%}, spread {spread:.1f} pts)"
+        )
 
 
 def _print_usage() -> None:
