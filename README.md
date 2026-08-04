@@ -126,11 +126,31 @@ order — whichever module finishes first is sent first — and each carries an
 mid-stream arrives as an `error` event rather than an HTTP status, since the
 headers are long gone by then.
 
-Observed locally on a warm corpus: syllabus at 4s, first module at 41s, all four
-modules and final usage at 52s. Streaming buys 11 seconds of perceived latency
-here. The larger win would be token-level streaming within a module, which needs
-the generation call itself to stream and is not wired up yet — a module still
-takes about 40 seconds to appear.
+Notes stream token by token via `token` events, and each module also emits a
+terminal `module` event carrying the complete object with citations and quiz. A
+client renders tokens as they land and swaps in the final object when it
+arrives.
+
+Latency is dominated by the model's thinking phase, not by retrieval or by the
+transport. Measured on a warm corpus:
+
+| Stage | Time |
+|---|---|
+| Retrieval, all four modules | 3.9s |
+| First text, thinking on (isolated call) | 2.9s |
+| First text, thinking disabled | 0.9s |
+| First prose end to end, four modules concurrent | ~52s |
+
+The gap between an isolated 2.9s and ~52s under four-way concurrency is not yet
+explained, and the honest position is that token streaming has not yet delivered
+the win it was meant to: first prose arrived later than the previous
+module-level stream produced a whole first module. `config.GENERATION_THINKING`
+exposes the one lever measured so far — setting it to `{"type": "disabled"}`
+cuts first text to 0.9s, at the cost of a generation path whose faithfulness
+would need re-measuring against the fixture.
+
+Note also that deltas are coarse: about 51 events for a 5,800-character module,
+so roughly 114 characters per event rather than per-token.
 
 ## How it works
 

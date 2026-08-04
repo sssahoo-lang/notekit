@@ -10,15 +10,17 @@ decide.
 
 from __future__ import annotations
 
+import queue
 import re
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 from . import config, embedding, ingest, llm, retrieval
 from .models import Chunk, Module, ModuleNotes, Quiz, Syllabus
 from .style import StyleProfile
 
 _CITATION = re.compile(r"\[c(\d+)\]")
+_REFUSAL_MARKER = "INSUFFICIENT"
 
 _PLANNER_SYSTEM = """You design short, focused courses of study.
 
@@ -84,6 +86,32 @@ def _format_passages(chunks: list[Chunk]) -> str:
     )
 
 
+def _refusal_for(module: Module, chunks: list[Chunk]) -> ModuleNotes | None:
+    """Pre-generation refusal checks, shared by the streaming and plain paths."""
+    if not chunks:
+        return ModuleNotes(
+            module_title=module.title,
+            body="",
+            cited_chunk_ids=[],
+            chunks=[],
+            refused=True,
+            refusal_reason="No source passages retrieved for this module.",
+        )
+    if chunks[0].score < config.REFUSAL_SCORE_THRESHOLD:
+        return ModuleNotes(
+            module_title=module.title,
+            body="",
+            cited_chunk_ids=[],
+            chunks=chunks,
+            refused=True,
+            refusal_reason=(
+                f"Best passage scored {chunks[0].score:.2f}, below the coverage "
+                f"threshold of {config.REFUSAL_SCORE_THRESHOLD}."
+            ),
+        )
+    return None
+
+
 def generate_module_notes(
     module: Module,
     *,
@@ -101,28 +129,9 @@ def generate_module_notes(
         [module.query, *module.learning_goals], namespace=namespace, cfg=cfg
     )
 
-    if not chunks:
-        return ModuleNotes(
-            module_title=module.title,
-            body="",
-            cited_chunk_ids=[],
-            chunks=[],
-            refused=True,
-            refusal_reason="No source passages retrieved for this module.",
-        )
-
-    if chunks[0].score < config.REFUSAL_SCORE_THRESHOLD:
-        return ModuleNotes(
-            module_title=module.title,
-            body="",
-            cited_chunk_ids=[],
-            chunks=chunks,
-            refused=True,
-            refusal_reason=(
-                f"Best passage scored {chunks[0].score:.2f}, below the coverage "
-                f"threshold of {config.REFUSAL_SCORE_THRESHOLD}."
-            ),
-        )
+    refusal = _refusal_for(module, chunks)
+    if refusal:
+        return refusal
 
     goals = "\n".join(f"- {g}" for g in module.learning_goals)
     # Identical string in both calls: the quiz call can only read this from
@@ -145,10 +154,10 @@ def generate_module_notes(
         max_tokens=config.MAX_TOKENS_NOTES,
     )
 
-    if body.strip().startswith("INSUFFICIENT"):
+    if body.strip().startswith(_REFUSAL_MARKER):
         # Keep only the first line: the model sometimes ignores rule 3 and
         # appends partial notes anyway, which must not be reported as a reason.
-        reason = body.strip().removeprefix("INSUFFICIENT").strip()
+        reason = body.strip().removeprefix(_REFUSAL_MARKER).strip()
         return ModuleNotes(
             module_title=module.title,
             body="",
@@ -177,6 +186,101 @@ def generate_module_notes(
         chunks=chunks,
         quiz=quiz,
     )
+
+
+def stream_module_notes(
+    module: Module,
+    *,
+    namespace: str,
+    cfg: config.RetrievalConfig | None = None,
+    with_quiz: bool = False,
+    style: StyleProfile | None = None,
+) -> Iterator[dict]:
+    """Same work as `generate_module_notes`, emitted as it is written.
+
+    Yields `token` events while the notes generate, then one terminal `module`
+    event carrying the complete `ModuleNotes`. A client can render the prose as
+    it arrives and replace it with the final object for citations and quiz.
+    """
+    cfg = cfg or config.EMBEDDING
+    chunks = retrieval.retrieve_multi(
+        [module.query, *module.learning_goals], namespace=namespace, cfg=cfg
+    )
+
+    refusal = _refusal_for(module, chunks)
+    if refusal:
+        yield {"type": "module", "notes": refusal.model_dump()}
+        return
+
+    goals = "\n".join(f"- {g}" for g in module.learning_goals)
+    passages = f"Source passages:\n\n{_format_passages(chunks)}"
+    style_instruction = f"\n\n{style.as_instruction()}" if style else ""
+
+    deltas = llm.stream_complete(
+        model=config.GENERATION_MODEL,
+        system=_GROUNDING_SYSTEM,
+        cached_prefix=passages,
+        prompt=(
+            f"Module: {module.title}\n\n"
+            f"The reader should come away able to:\n{goals}\n\n"
+            f"{_NOTES_TASK}{style_instruction}"
+        ),
+        max_tokens=config.MAX_TOKENS_NOTES,
+    )
+
+    # A refusal announces itself only in the first word, so hold back the
+    # opening until there is enough text to tell. Emitting first and retracting
+    # later would flash discarded prose at the reader.
+    body = ""
+    holding = True
+    for delta in deltas:
+        body += delta
+        if holding:
+            if len(body) < len(_REFUSAL_MARKER):
+                continue
+            holding = False
+            if body.startswith(_REFUSAL_MARKER):
+                # Drain the rest silently; it is a refusal, not notes.
+                for rest in deltas:
+                    body += rest
+                break
+            yield {"type": "token", "text": body}
+        else:
+            yield {"type": "token", "text": delta}
+
+    if body.strip().startswith(_REFUSAL_MARKER):
+        reason = body.strip().removeprefix(_REFUSAL_MARKER).strip()
+        yield {
+            "type": "module",
+            "notes": ModuleNotes(
+                module_title=module.title,
+                body="",
+                cited_chunk_ids=[],
+                chunks=chunks,
+                refused=True,
+                refusal_reason=reason.split("\n", 1)[0].lstrip(": ").strip(),
+            ).model_dump(),
+        }
+        return
+
+    retrieved_ids = {c.id for c in chunks}
+    cited = [int(m) for m in _CITATION.findall(body)]
+    invalid = sorted(set(cited) - retrieved_ids)
+    if invalid:
+        raise RuntimeError(f"Notes cited chunks that were never retrieved: {invalid}")
+
+    quiz = generate_quiz(module, chunks, passages=passages) if with_quiz else None
+
+    yield {
+        "type": "module",
+        "notes": ModuleNotes(
+            module_title=module.title,
+            body=body,
+            cited_chunk_ids=sorted(set(cited)),
+            chunks=chunks,
+            quiz=quiz,
+        ).model_dump(),
+    }
 
 
 def generate_quiz(
@@ -258,27 +362,42 @@ def run_course_events(
 
     embedding.warm(cfg)
 
-    with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_MODULES) as pool:
-        futures = {
-            pool.submit(
-                generate_module_notes,
+    for index, module in enumerate(syllabus.modules):
+        yield {"type": "module_start", "index": index, "title": module.title}
+
+    # Modules generate concurrently and each emits its own token stream, so the
+    # worker threads publish into one queue that this generator drains. Every
+    # event carries its module index; a client routes tokens by that, since
+    # events from different modules interleave.
+    events: queue.Queue = queue.Queue()
+    remaining = len(syllabus.modules)
+
+    def worker(index: int, module: Module) -> None:
+        try:
+            for event in stream_module_notes(
                 module,
                 namespace=namespace,
                 cfg=cfg,
                 with_quiz=with_quiz,
                 style=style,
-            ): index
-            for index, module in enumerate(syllabus.modules)
-        }
-        for future in as_completed(futures):
-            index = futures[future]
-            try:
-                notes = future.result()
-            except Exception as exc:  # noqa: BLE001
-                # One failed module must not lose the others already written.
-                yield {"type": "module_error", "index": index, "error": str(exc)}
+            ):
+                events.put({**event, "index": index})
+        except Exception as exc:  # noqa: BLE001
+            # One failed module must not lose the others already written.
+            events.put({"type": "module_error", "index": index, "error": str(exc)})
+        finally:
+            events.put({"type": "_worker_done"})
+
+    with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_MODULES) as pool:
+        for index, module in enumerate(syllabus.modules):
+            pool.submit(worker, index, module)
+
+        while remaining:
+            event = events.get()
+            if event["type"] == "_worker_done":
+                remaining -= 1
                 continue
-            yield {"type": "module", "index": index, "notes": notes.model_dump()}
+            yield event
 
     entries, cost = llm.usage_report()
     yield {

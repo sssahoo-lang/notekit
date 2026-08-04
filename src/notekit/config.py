@@ -27,6 +27,14 @@ PLANNER_MODEL = "claude-haiku-4-5"
 # project, lowest judgement difficulty — keep it cheap.
 JUDGE_MODEL = "claude-haiku-4-5"
 
+# Sonnet 5 thinks before answering by default. Thinking happens before any text
+# is emitted, so it sets the floor on time-to-first-token when streaming:
+# measured at 2.9s with thinking on versus 0.9s with it off, and it grows with
+# prompt complexity. Set to {"type": "disabled"} to trade some reasoning for a
+# faster first paint — and re-measure faithfulness against the fixture if you do,
+# since it changes the generation path.
+GENERATION_THINKING: dict | None = None
+
 MAX_TOKENS_NOTES = 4000
 MAX_TOKENS_PLAN = 2000
 MAX_TOKENS_QUIZ = 3000

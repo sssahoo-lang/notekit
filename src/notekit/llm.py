@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
+from collections.abc import Iterator
 from typing import TypeVar
 
 import anthropic
@@ -86,6 +87,43 @@ def complete(
         raise RuntimeError(f"Model declined the request: {response.stop_details}")
 
     return "".join(b.text for b in response.content if b.type == "text")
+
+
+def stream_complete(
+    *,
+    model: str,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    cached_prefix: str | None = None,
+) -> Iterator[str]:
+    """Yield text deltas as they arrive. Usage is recorded when the stream ends."""
+    content: list[dict] = []
+    if cached_prefix:
+        content.append(
+            {
+                "type": "text",
+                "text": cached_prefix,
+                "cache_control": {"type": "ephemeral"},
+            }
+        )
+    content.append({"type": "text", "text": prompt})
+
+    extra = {"thinking": config.GENERATION_THINKING} if config.GENERATION_THINKING else {}
+
+    with _client.messages.stream(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": content}],
+        **extra,
+    ) as stream:
+        yield from stream.text_stream
+        final = stream.get_final_message()
+
+    _record(model, final.usage)
+    if final.stop_reason == "refusal":
+        raise RuntimeError(f"Model declined the request: {final.stop_details}")
 
 
 def parse(
