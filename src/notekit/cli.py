@@ -68,10 +68,13 @@ def course_cmd(
     goal: str = typer.Argument(..., help="e.g. 'teach me Q-learning at an intermediate level'"),
     limit: int = typer.Option(10, help="Maximum documents to ingest if the topic is new"),
     skip_ingest: bool = typer.Option(False, help="Assume the corpus already exists"),
+    quiz: bool = typer.Option(False, help="Also generate a quiz per module"),
 ) -> None:
     """Plan a syllabus and write cited notes for every module."""
     llm.reset_usage()
-    syllabus, notes = run_course(goal, limit=limit, skip_ingest=skip_ingest)
+    syllabus, notes = run_course(
+        goal, limit=limit, skip_ingest=skip_ingest, with_quiz=quiz
+    )
 
     console.print(f"\n[bold]{syllabus.summary}[/]")
     console.print(f"[dim]namespace: {syllabus.topic_slug}[/]\n")
@@ -93,6 +96,16 @@ def course_cmd(
             c = sources[chunk_id]
             console.print(f"  [cyan]{c.citation_key}[/] {c.document_title} — {c.document_url}")
         console.print()
+
+        if module.quiz:
+            console.print("[dim]Quiz:[/]")
+            for i, q in enumerate(module.quiz.questions, 1):
+                console.print(f"  [bold]{i}. {q.question}[/]", markup=False)
+                for j, option in enumerate(q.options):
+                    mark = "[green]*[/]" if j == q.answer_index else " "
+                    console.print(f"    {mark} {chr(97 + j)}) {option}", markup=False)
+                console.print(f"     [dim]{q.explanation}[/]", markup=False)
+            console.print()
 
     _print_usage()
 

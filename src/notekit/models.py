@@ -43,6 +43,19 @@ class Chunk(BaseModel):
         return f"c{self.id}"
 
 
+class QuizQuestion(BaseModel):
+    question: str
+    options: list[str] = Field(description="Exactly four answer options")
+    answer_index: int = Field(description="0-based index of the correct option")
+    explanation: str = Field(
+        description="Why the answer is correct, citing passages as [c123]"
+    )
+
+
+class Quiz(BaseModel):
+    questions: list[QuizQuestion]
+
+
 class ModuleNotes(BaseModel):
     module_title: str
     body: str
@@ -50,6 +63,7 @@ class ModuleNotes(BaseModel):
     chunks: list[Chunk]
     refused: bool = False
     refusal_reason: str | None = None
+    quiz: Quiz | None = None
 
 
 class Usage(BaseModel):

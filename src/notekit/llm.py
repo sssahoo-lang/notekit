@@ -89,14 +89,31 @@ def complete(
 
 
 def parse(
-    *, model: str, system: str, prompt: str, max_tokens: int, schema: type[T]
+    *,
+    model: str,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    schema: type[T],
+    cached_prefix: str | None = None,
 ) -> T:
     """A completion constrained to a pydantic schema."""
+    content: list[dict] = []
+    if cached_prefix:
+        content.append(
+            {
+                "type": "text",
+                "text": cached_prefix,
+                "cache_control": {"type": "ephemeral"},
+            }
+        )
+    content.append({"type": "text", "text": prompt})
+
     response = _client.messages.parse(
         model=model,
         max_tokens=max_tokens,
         system=system,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": content}],
         output_format=schema,
     )
     _record(model, response.usage)

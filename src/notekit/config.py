@@ -29,6 +29,7 @@ JUDGE_MODEL = "claude-haiku-4-5"
 
 MAX_TOKENS_NOTES = 4000
 MAX_TOKENS_PLAN = 2000
+MAX_TOKENS_QUIZ = 3000
 
 # Published rates, USD per million tokens. Used only for the cost estimate the
 # CLI prints; nothing depends on these being exact.
