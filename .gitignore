@@ -8,7 +8,10 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# Editor and agent settings, local to whoever is working on this
 .claude/
+.cursor/
 
 # Cached HF models and downloaded PDFs
 .cache/
