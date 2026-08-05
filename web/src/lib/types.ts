@@ -14,6 +14,13 @@ export type CourseRequest = {
   with_quiz?: boolean;
 };
 
+export type CourseProgress = {
+  /** Indices of sections the reader has marked as read. */
+  modules_read?: number[];
+  /** Where they stopped, so reopening lands in the right place. */
+  bookmark?: { module_index: number; anchor?: string } | null;
+};
+
 export type SavedCourseSummary = {
   id: number;
   user_id: string;
@@ -26,6 +33,8 @@ export type SavedCourseSummary = {
   with_quiz: boolean;
   used_style: boolean;
   created_at: string;
+  progress?: CourseProgress;
+  opened_at?: string | null;
 };
 
 export type SavedModule = {

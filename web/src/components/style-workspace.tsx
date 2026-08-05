@@ -3,138 +3,131 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { RunError } from "@/components/run-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getStyle, learnStyle } from "@/lib/api";
+import { getProfile } from "@/lib/profile";
 import type { StyleProfile } from "@/lib/types";
-import { getStoredUser, setStoredUser } from "@/lib/user";
 
 export function StyleWorkspace() {
-  const [user, setUser] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
   const [sample, setSample] = useState("");
   const [profile, setProfile] = useState<StyleProfile | null>(null);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    Promise.resolve().then(() => {
-      if (cancelled) return;
-      const stored = getStoredUser();
-      setUser(stored);
-      if (stored) void load(stored);
-    });
-    return () => {
-      cancelled = true;
-    };
+    const id = getProfile().id;
+    setUserId(id);
+    getStyle(id)
+      .then(setProfile)
+      .catch(() => setProfile(null))
+      .finally(() => setLoading(false));
   }, []);
-
-  async function load(who: string) {
-    setLoading(true);
-    try {
-      setProfile(await getStyle(who));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function onLearn(e: React.FormEvent) {
     e.preventDefault();
-    if (!user.trim()) {
-      toast.error("User id is required");
+    if (sample.trim().length < 400) {
+      toast.error(
+        "Paste a bit more — a few paragraphs, so there's enough to go on",
+      );
       return;
     }
-    if (sample.trim().length < 40) {
-      toast.error("Paste a longer writing sample");
-      return;
-    }
-    setStoredUser(user);
     setBusy(true);
+    setError(null);
     try {
-      const learned = await learnStyle(user.trim(), sample.trim());
-      setProfile(learned);
-      toast.success("Style profile saved");
+      setProfile(await learnStyle(userId ?? "anonymous", sample.trim()));
+      toast.success("Saved. New courses can now use your style.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-14 sm:px-6">
-      <p className="font-mono text-[0.7rem] tracking-[0.18em] text-primary/80 uppercase">
-        Voice, not content
-      </p>
-      <h1 className="font-heading mt-3 text-4xl tracking-tight text-ink">
-        Style
+    <div id="main" className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6">
+      <h1 className="font-heading text-3xl tracking-tight text-ink">
+        Writing style
       </h1>
-      <p className="mt-3 max-w-lg text-muted-foreground">
-        Learn how you write from a sample, then apply that form to any course.
-        Costs about 10 points of faithfulness — leave it off unless you want
-        the voice trade-off.
+      <p className="mt-2 max-w-prose text-muted-foreground">
+        Paste something you wrote and NoteKit learns how you write — how long
+        your sentences run, how formal you are, whether you reach for analogies.
+        New courses can then be written in that voice, which is easier to read
+        than generic explanation.
       </p>
 
-      <form onSubmit={onLearn} className="mt-10 space-y-5">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[12rem] flex-1 space-y-2">
-            <Label htmlFor="user">User id</Label>
-            <Input
-              id="user"
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
-              placeholder="sriya"
-              disabled={busy}
-            />
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={!user.trim() || loading || busy}
-            onClick={() => {
-              setStoredUser(user);
-              void load(user.trim());
-            }}
-          >
-            {loading ? "Loading…" : "Load profile"}
-          </Button>
-        </div>
+      <div className="mt-4 rounded-xl border border-amber-800/25 bg-amber-50/60 p-4">
+        <p className="text-sm text-amber-950">
+          <strong className="font-medium">Worth knowing:</strong> notes written
+          in your style are measurably less strictly grounded — around 10% more
+          of their claims stray from the sources, mostly through analogies. It
+          stays off unless you tick the box when building a course.
+        </p>
+      </div>
 
+      <p className="mt-4 text-sm text-muted-foreground">
+        Only the description of your writing is kept. The sample itself is used
+        once and never stored, and it never influences what your notes claim —
+        only how they read.
+      </p>
+
+      <form onSubmit={onLearn} className="mt-8 space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="sample">Writing sample</Label>
+          <Label htmlFor="sample">Something you wrote</Label>
           <Textarea
             id="sample"
             value={sample}
             onChange={(e) => setSample(e.target.value)}
             rows={10}
-            placeholder="Paste a few paragraphs of your own writing…"
-            className="resize-y font-notes"
+            placeholder="Paste a few paragraphs — an old essay, notes, a blog post. Anything in your own words."
+            className="resize-y font-notes text-base"
             disabled={busy}
+            aria-describedby="sample-help"
           />
+          <p id="sample-help" className="text-sm text-muted-foreground">
+            {sample.trim().length < 400
+              ? `About ${Math.max(0, 400 - sample.trim().length)} more characters needed.`
+              : "Long enough — ready when you are."}
+          </p>
         </div>
 
-        <Button type="submit" disabled={busy}>
-          {busy ? "Learning…" : "Learn style"}
+        <Button type="submit" disabled={busy || sample.trim().length < 400}>
+          {busy ? "Reading your writing…" : "Learn my style"}
         </Button>
       </form>
 
-      {profile ? (
-        <div className="mt-10 space-y-4 rounded-2xl border border-border/70 bg-paper px-5 py-6">
-          <h2 className="font-heading text-xl tracking-tight">Saved profile</h2>
-          <p className="text-sm leading-relaxed text-ink/85">{profile.summary}</p>
+      {error ? (
+        <div className="mt-6">
+          <RunError message={error} />
+        </div>
+      ) : null}
+
+      {loading ? (
+        <p className="mt-8 text-sm text-muted-foreground">Checking…</p>
+      ) : profile ? (
+        <section
+          aria-labelledby="saved-style"
+          className="mt-10 space-y-4 rounded-2xl border border-border bg-card px-5 py-6"
+        >
+          <h2 id="saved-style" className="text-lg font-medium text-ink">
+            How NoteKit sees your writing
+          </h2>
+          <p className="leading-relaxed text-foreground/85">{profile.summary}</p>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">{profile.formality}</Badge>
             <Badge variant="secondary">{profile.person} person</Badge>
-            <Badge variant="secondary">{profile.sentence_length} sentences</Badge>
+            <Badge variant="secondary">
+              {profile.sentence_length} sentences
+            </Badge>
             <Badge variant="secondary">{profile.structure}</Badge>
-            <Badge variant="secondary">{profile.vocabulary}</Badge>
+            <Badge variant="secondary">{profile.vocabulary} words</Badge>
             {profile.uses_analogies ? (
-              <Badge variant="outline">analogies</Badge>
+              <Badge variant="outline">uses analogies</Badge>
             ) : null}
             {profile.uses_worked_examples ? (
               <Badge variant="outline">worked examples</Badge>
@@ -150,8 +143,14 @@ export function StyleWorkspace() {
               ))}
             </ul>
           ) : null}
-        </div>
-      ) : null}
+        </section>
+      ) : (
+        <p className="mt-8 max-w-prose text-sm text-muted-foreground">
+          No style saved yet. Once you add one it appears here, and a
+          &ldquo;Write in my style&rdquo; option shows up when you build a
+          course.
+        </p>
+      )}
     </div>
   );
 }

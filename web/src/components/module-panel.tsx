@@ -41,7 +41,7 @@ export function ModulePanel({ module }: Props) {
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-mono text-[0.7rem] tracking-[0.14em] text-muted-foreground uppercase">
-            Module {module.index + 1}
+            Section {module.index + 1}
           </p>
           <h2 className="font-heading mt-1 text-2xl tracking-tight text-ink">
             {module.title}

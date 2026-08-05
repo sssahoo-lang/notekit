@@ -1,5 +1,6 @@
 import type {
   CourseEvent,
+  CourseProgress,
   CourseRequest,
   NamespaceInfo,
   SavedCourse,
@@ -70,6 +71,44 @@ export async function deleteCourse(
     method: "DELETE",
   });
   if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function saveProgress(
+  id: number,
+  progress: CourseProgress,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/courses/${id}/progress`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      modules_read: progress.modules_read ?? [],
+      bookmark: progress.bookmark ?? null,
+    }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+/** Ask about a highlighted span, answered from that section's own sources. */
+export async function explainSelection(input: {
+  courseId: number;
+  moduleIndex: number;
+  highlighted: string;
+  question?: string;
+  user?: string;
+}): Promise<{ answer: string; estimated_cost_usd: number }> {
+  const res = await fetch(`${API_BASE}/api/explain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: input.courseId,
+      module_index: input.moduleIndex,
+      highlighted: input.highlighted,
+      question: input.question || null,
+      user: input.user || null,
+    }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
 }
 
 export async function getStyle(user: string): Promise<StyleProfile | null> {

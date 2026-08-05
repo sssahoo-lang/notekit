@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { ContinueCard, isFinished } from "@/components/continue-card";
+import { LibraryList } from "@/components/library-list";
+import { RunError, RunStatus, type RunPhase } from "@/components/run-status";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -22,279 +24,160 @@ import {
   listCourses,
   streamCourse,
 } from "@/lib/api";
-import {
-  loadCachedCourse,
-  saveCachedCourse,
-  type CachedCourse,
-} from "@/lib/course-cache";
+import { clearCachedCourse } from "@/lib/course-cache";
+import { getProfile, greetingName, type Profile } from "@/lib/profile";
 import type {
   ModuleState,
   NamespaceInfo,
   SavedCourseSummary,
 } from "@/lib/types";
-import { getStoredUser, setStoredUser } from "@/lib/user";
-import { cn } from "@/lib/utils";
 
-import { HistoryPanel } from "./history-panel";
 import { ModulePanel } from "./module-panel";
 
-type Phase =
-  | "idle"
-  | "planning"
-  | "ingesting"
-  | "generating"
-  | "done"
-  | "error";
+const AUTO_SOURCE = "__auto__";
 
-const AUTO_NS = "__auto__";
+/** Turn a storage namespace into something a reader recognises. */
+function sourceLabel(ns: NamespaceInfo): string {
+  if (ns.namespace.startsWith("user-")) {
+    const topic = ns.namespace.split("-").slice(2).join(" ") || "notes";
+    return `Your uploaded material — ${topic}`;
+  }
+  return ns.namespace.replace(/-/g, " ");
+}
 
 export function CourseWorkspace() {
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [goal, setGoal] = useState("");
-  const [user, setUser] = useState("");
-  const [namespace, setNamespace] = useState(AUTO_NS);
-  const [namespaces, setNamespaces] = useState<NamespaceInfo[]>([]);
-  const [history, setHistory] = useState<SavedCourseSummary[]>([]);
+  const [source, setSource] = useState(AUTO_SOURCE);
+  const [sources, setSources] = useState<NamespaceInfo[]>([]);
+  const [library, setLibrary] = useState<SavedCourseSummary[]>([]);
   const [activeCourseId, setActiveCourseId] = useState<number | null>(null);
   const [withQuiz, setWithQuiz] = useState(true);
   const [useStyle, setUseStyle] = useState(false);
-  const [skipIngest, setSkipIngest] = useState(false);
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [statusLine, setStatusLine] = useState("");
+  const [phase, setPhase] = useState<RunPhase>("idle");
+  const [detail, setDetail] = useState("");
   const [summary, setSummary] = useState<string | null>(null);
-  const [activeNamespace, setActiveNamespace] = useState<string | null>(null);
   const [modules, setModules] = useState<ModuleState[]>([]);
   const [cost, setCost] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingLibrary, setLoadingLibrary] = useState(true);
+  const [generatedHere, setGeneratedHere] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const resultsRef = useRef<HTMLDivElement | null>(null);
 
-  const historyUser = user.trim() || "anonymous";
+  const userId = profile?.id ?? "anonymous";
 
-  const refreshHistory = useCallback(async (who?: string) => {
+  const refreshLibrary = useCallback(async (id: string) => {
     try {
-      const rows = await listCourses(who ?? historyUser);
-      setHistory(rows);
+      setLibrary(await listCourses(id));
     } catch {
-      setHistory([]);
+      setLibrary([]);
+    } finally {
+      setLoadingLibrary(false);
     }
-  }, [historyUser]);
-
-  function applyCached(cached: CachedCourse) {
-    setActiveCourseId(cached.id);
-    setGoal(cached.goal);
-    setSummary(cached.summary);
-    setActiveNamespace(cached.namespace);
-    setCost(cached.cost);
-    setModules(cached.modules);
-    setError(null);
-    setStatusLine("");
-    setPhase("done");
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.resolve().then(() => {
-      if (cancelled) return;
-      const stored = getStoredUser();
-      setUser(stored);
-      const cached = loadCachedCourse();
-      if (cached?.modules?.length) {
-        applyCached(cached);
-      }
-      getNamespaces()
-        .then((rows) => {
-          if (!cancelled) setNamespaces(rows);
-        })
-        .catch(() => {
-          if (!cancelled) setNamespaces([]);
-        });
-      listCourses(stored.trim() || "anonymous")
-        .then((rows) => {
-          if (!cancelled) setHistory(rows);
-        })
-        .catch(() => {
-          if (!cancelled) setHistory([]);
-        });
-    });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  function persistLocal(partial: {
-    id?: number | null;
-    goal?: string;
-    summary?: string | null;
-    namespace?: string | null;
-    cost?: number | null;
-    modules?: ModuleState[];
-    user?: string;
-  }) {
-    const snapshot: CachedCourse = {
-      id: partial.id ?? activeCourseId,
-      user: partial.user ?? (user.trim() || "anonymous"),
-      goal: partial.goal ?? goal,
-      summary: partial.summary ?? summary,
-      namespace: partial.namespace ?? activeNamespace,
-      cost: partial.cost !== undefined ? partial.cost : cost,
-      modules: partial.modules ?? modules,
-      savedAt: new Date().toISOString(),
-    };
-    if (snapshot.modules.length) saveCachedCourse(snapshot);
-  }
-
-  // Keep the last finished course in the browser so refresh/reopen shows it
-  // even before/without clicking History.
   useEffect(() => {
-    if (phase !== "done" || modules.length === 0) return;
-    saveCachedCourse({
-      id: activeCourseId,
-      user: user.trim() || "anonymous",
-      goal,
-      summary,
-      namespace: activeNamespace,
-      cost,
-      modules,
-      savedAt: new Date().toISOString(),
-    });
-  }, [
-    phase,
-    modules,
-    activeCourseId,
-    user,
-    goal,
-    summary,
-    activeNamespace,
-    cost,
-  ]);
+    const p = getProfile();
+    setProfile(p);
+    void refreshLibrary(p.id);
+    getNamespaces()
+      .then(setSources)
+      .catch(() => setSources([]));
+  }, [refreshLibrary]);
 
   const running =
-    phase === "planning" || phase === "ingesting" || phase === "generating";
+    phase === "planning" || phase === "gathering" || phase === "writing";
+  const viewingCourse = modules.length > 0;
 
-  const progressLabel = useMemo(() => {
-    if (phase === "planning") return "Planning syllabus";
-    if (phase === "ingesting") return statusLine || "Ingesting corpus";
-    if (phase === "generating") {
-      const done = modules.filter((m) =>
-        ["done", "refused", "error"].includes(m.status),
-      ).length;
-      return `Writing modules ${done}/${modules.length || "…"}`;
-    }
-    if (phase === "done" && activeCourseId != null) {
-      return `Saved course #${activeCourseId}`;
-    }
-    if (phase === "done") return "Course ready";
-    return null;
-  }, [phase, statusLine, modules, activeCourseId]);
+  const modulesDone = useMemo(
+    () =>
+      modules.filter((m) => ["done", "refused", "error"].includes(m.status))
+        .length,
+    [modules],
+  );
 
-  function clearView() {
+  // The newest course still worth returning to.
+  const continueCourse = useMemo(
+    () => library.find((c) => !isFinished(c)) ?? null,
+    [library],
+  );
+
+  function resetView() {
     abortRef.current?.abort();
     setActiveCourseId(null);
     setPhase("idle");
-    setStatusLine("");
+    setDetail("");
     setSummary(null);
-    setActiveNamespace(null);
     setModules([]);
     setCost(null);
     setError(null);
+    clearCachedCourse();
   }
 
-  async function openSaved(id: number) {
-    if (running) return;
+  async function openCourse(id: number) {
+    setError(null);
     try {
       const course = await getCourse(id);
-      const nextModules: ModuleState[] = course.modules.map((m) => ({
-        index: m.index,
-        title: m.title,
-        streamingText: m.notes?.body ?? "",
-        notes: m.notes,
-        error: m.error,
-        status: m.error
-          ? "error"
-          : m.notes?.refused
-            ? "refused"
-            : "done",
-      }));
-      const nextCost =
-        course.estimated_cost_usd != null
-          ? Number(course.estimated_cost_usd)
-          : null;
       setActiveCourseId(course.id);
       setGoal(course.goal);
       setSummary(course.summary);
-      setActiveNamespace(course.namespace);
-      setCost(nextCost);
-      setError(null);
-      setStatusLine("");
-      setModules(nextModules);
+      setCost(course.estimated_cost_usd);
+      setModules(
+        course.modules.map((m) => ({
+          index: m.index,
+          title: m.title,
+          streamingText: "",
+          notes: m.notes,
+          error: m.error,
+          status: m.error
+            ? "error"
+            : m.notes?.refused
+              ? "refused"
+              : "done",
+        })),
+      );
       setPhase("done");
-      persistLocal({
-        id: course.id,
-        goal: course.goal,
-        summary: course.summary,
-        namespace: course.namespace,
-        cost: nextCost,
-        modules: nextModules,
-      });
-      requestAnimationFrame(() => {
-        resultsRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      });
+      setGeneratedHere(false);
+      void refreshLibrary(userId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  async function onDelete(id: number) {
+  async function removeCourse(id: number) {
     try {
-      await deleteCourse(id, historyUser);
-      if (activeCourseId === id) clearView();
-      await refreshHistory();
-      toast.success("Removed from history");
+      await deleteCourse(id, userId);
+      if (id === activeCourseId) resetView();
+      void refreshLibrary(userId);
+      toast.success("Course deleted");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = goal.trim();
-    if (!trimmed || running) return;
+  async function start() {
+    if (!goal.trim() || running) return;
 
-    if (!user.trim()) {
-      toast.message("Saving as anonymous — set a user id to keep history yours");
-    }
-
-    setStoredUser(user);
-    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setActiveCourseId(null);
-    setPhase("planning");
-    setStatusLine("");
-    setSummary(null);
-    setActiveNamespace(null);
-    setModules([]);
-    setCost(null);
     setError(null);
-
-    requestAnimationFrame(() => {
-      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setActiveCourseId(null);
+    setModules([]);
+    setSummary(null);
+    setCost(null);
+    setPhase("planning");
+    setDetail("");
+    setGeneratedHere(true);
 
     try {
       for await (const event of streamCourse(
         {
-          goal: trimmed,
-          namespace: namespace === AUTO_NS ? null : namespace,
-          user: user.trim() || "anonymous",
-          use_style: useStyle && Boolean(user.trim()),
+          goal: goal.trim(),
+          user: userId,
+          use_style: useStyle,
           with_quiz: withQuiz,
-          skip_ingest: skipIngest || namespace !== AUTO_NS,
-          limit: 10,
+          namespace: source === AUTO_SOURCE ? null : source,
         },
         controller.signal,
       )) {
@@ -304,7 +187,6 @@ export function CourseWorkspace() {
             break;
           case "syllabus":
             setSummary(event.summary);
-            setActiveNamespace(event.namespace);
             setModules(
               event.modules.map((title, index) => ({
                 index,
@@ -315,29 +197,21 @@ export function CourseWorkspace() {
                 status: "pending",
               })),
             );
-            setPhase("generating");
+            setPhase("writing");
             break;
           case "ingesting":
-            setPhase("ingesting");
-            setStatusLine(`Indexing ${event.namespace}…`);
-            setActiveNamespace(event.namespace);
+            setPhase("gathering");
             break;
           case "ingested":
-            setStatusLine(
+            setDetail(
               event.cached
-                ? `Corpus cached · ${event.chunks} chunks`
-                : `Indexed ${event.chunks} chunks`,
+                ? "Reusing sources gathered earlier."
+                : `Read ${event.chunks} passages.`,
             );
+            setPhase("writing");
             break;
           case "module_start":
-            setModules((prev) =>
-              prev.map((m) =>
-                m.index === event.index
-                  ? { ...m, title: event.title, status: "streaming" }
-                  : m,
-              ),
-            );
-            setPhase("generating");
+            setPhase("writing");
             break;
           case "token":
             setModules((prev) =>
@@ -359,7 +233,6 @@ export function CourseWorkspace() {
                   ? {
                       ...m,
                       notes: event.notes,
-                      streamingText: event.notes.body || m.streamingText,
                       status: event.notes.refused ? "refused" : "done",
                     }
                   : m,
@@ -378,234 +251,200 @@ export function CourseWorkspace() {
           case "done":
             setCost(event.estimated_cost_usd);
             setPhase("done");
-            getNamespaces().then(setNamespaces).catch(() => undefined);
+            getNamespaces().then(setSources).catch(() => undefined);
             break;
           case "saved":
             setActiveCourseId(event.id);
             setPhase("done");
-            toast.success(`Saved to history (#${event.id})`);
-            void refreshHistory(user.trim() || "anonymous");
+            void refreshLibrary(userId);
             break;
           case "error":
             setError(event.error);
             setPhase("error");
-            toast.error(event.error);
             break;
         }
       }
       setPhase((p) => (p === "error" ? p : "done"));
     } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
+      if ((err as Error).name === "AbortError") {
+        setPhase("idle");
+        return;
+      }
+      setError(err instanceof Error ? err.message : String(err));
       setPhase("error");
-      toast.error(message);
     }
   }
 
-  function stop() {
-    abortRef.current?.abort();
-    setPhase((p) => (p === "done" || p === "idle" ? p : "done"));
-  }
+  const showHome = !running && !viewingCourse;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-        <div>
-          <section
-            className={cn(
-              "relative overflow-hidden pt-14 pb-10 sm:pt-20 sm:pb-14",
-              modules.length === 0 && "min-h-[50vh]",
-            )}
-          >
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 -top-24 h-[28rem] bg-[radial-gradient(ellipse_at_30%_0%,oklch(0.82_0.06_195_/_0.55),transparent_55%),radial-gradient(ellipse_at_85%_20%,oklch(0.88_0.05_75_/_0.45),transparent_45%)]"
-            />
-            <div className="relative">
-              <p className="font-mono text-[0.7rem] tracking-[0.18em] text-primary/80 uppercase">
-                Grounded study notes
-              </p>
-              <h1 className="font-heading mt-3 max-w-xl text-5xl leading-[1.05] tracking-tight text-ink sm:text-6xl">
-                NoteKit
-              </h1>
-              <p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
-                Turn a learning goal into cited course notes from real sources —
-                streamed once, then saved in your history.
-              </p>
+    <div id="main" className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+      {showHome ? (
+        <>
+          <h1 className="font-heading text-3xl tracking-tight text-ink">
+            {profile?.name
+              ? `Welcome back, ${greetingName(profile)}`
+              : "What do you want to learn?"}
+          </h1>
+          <p className="mt-2 max-w-prose text-muted-foreground">
+            NoteKit writes study notes from real sources and shows you where
+            every claim came from. If the sources don&apos;t cover something, it
+            says so instead of guessing.
+          </p>
 
-              <form onSubmit={onSubmit} className="mt-10 max-w-2xl space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="goal">Learning goal</Label>
-                  <Textarea
-                    id="goal"
-                    value={goal}
-                    onChange={(e) => setGoal(e.target.value)}
-                    placeholder="Teach me Q-learning at an intermediate level"
-                    rows={3}
-                    className="resize-none bg-background/80 text-base shadow-sm"
-                    disabled={running}
+          {continueCourse ? (
+            <div className="mt-8">
+              <ContinueCard course={continueCourse} onOpen={openCourse} />
+            </div>
+          ) : null}
+
+          <section aria-labelledby="new-heading" className="mt-10">
+            <h2 id="new-heading" className="text-lg font-medium text-ink">
+              {continueCourse ? "Or study something new" : "Start studying"}
+            </h2>
+
+            <div className="mt-4 space-y-4 rounded-2xl border border-border bg-card p-5">
+              <div>
+                <Label htmlFor="goal" className="text-sm font-medium">
+                  What should this course teach you?
+                </Label>
+                <Textarea
+                  id="goal"
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                  rows={3}
+                  className="mt-2 text-base"
+                  placeholder="e.g. Teach me Q-learning at an intermediate level"
+                  aria-describedby="goal-help"
+                />
+                <p id="goal-help" className="mt-1.5 text-sm text-muted-foreground">
+                  Be specific about the level you want — it changes how the
+                  notes are written.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="source" className="text-sm font-medium">
+                  Where should the notes come from?
+                </Label>
+                <Select value={source} onValueChange={setSource}>
+                  <SelectTrigger id="source" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={AUTO_SOURCE}>
+                      Find sources for me
+                    </SelectItem>
+                    {sources.map((ns) => (
+                      <SelectItem key={ns.namespace} value={ns.namespace}>
+                        {sourceLabel(ns)} ({ns.documents} documents)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <fieldset className="space-y-2.5">
+                <legend className="text-sm font-medium">Options</legend>
+                <div className="flex items-center gap-2.5">
+                  <Checkbox
+                    id="quiz"
+                    checked={withQuiz}
+                    onCheckedChange={(v) => setWithQuiz(v === true)}
                   />
+                  <Label htmlFor="quiz" className="text-sm font-normal">
+                    Add practice questions to each section
+                  </Label>
                 </div>
+                <div className="flex items-center gap-2.5">
+                  <Checkbox
+                    id="style"
+                    checked={useStyle}
+                    onCheckedChange={(v) => setUseStyle(v === true)}
+                  />
+                  <Label htmlFor="style" className="text-sm font-normal">
+                    Write in my style
+                    <span className="ml-1 text-muted-foreground">
+                      (set it up under Writing style)
+                    </span>
+                  </Label>
+                </div>
+              </fieldset>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="namespace">Corpus</Label>
-                    <Select
-                      value={namespace}
-                      onValueChange={(v) => {
-                        if (v) {
-                          setNamespace(v);
-                          if (v !== AUTO_NS) setSkipIngest(true);
-                        }
-                      }}
-                      disabled={running}
-                    >
-                      <SelectTrigger
-                        id="namespace"
-                        className="w-full bg-background/80"
-                      >
-                        <SelectValue placeholder="Auto from goal" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={AUTO_NS}>
-                          Auto — ingest from goal
-                        </SelectItem>
-                        {namespaces.map((ns) => (
-                          <SelectItem key={ns.namespace} value={ns.namespace}>
-                            {ns.namespace} · {ns.documents} docs
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="user">User id</Label>
-                    <Input
-                      id="user"
-                      value={user}
-                      onChange={(e) => setUser(e.target.value)}
-                      onBlur={() => {
-                        setStoredUser(user);
-                        void refreshHistory(user.trim() || "anonymous");
-                      }}
-                      placeholder="sriya"
-                      className="bg-background/80"
-                      disabled={running}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm">
-                  <label className="flex items-center gap-2">
-                    <Checkbox
-                      checked={withQuiz}
-                      onCheckedChange={(v) => setWithQuiz(v === true)}
-                      disabled={running}
-                    />
-                    Include quiz
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <Checkbox
-                      checked={useStyle}
-                      onCheckedChange={(v) => setUseStyle(v === true)}
-                      disabled={running || !user.trim()}
-                    />
-                    Match my style
-                  </label>
-                  {namespace === AUTO_NS ? (
-                    <label className="flex items-center gap-2">
-                      <Checkbox
-                        checked={skipIngest}
-                        onCheckedChange={(v) => setSkipIngest(v === true)}
-                        disabled={running}
-                      />
-                      Skip ingest
-                    </label>
-                  ) : null}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <Button
-                    type="submit"
-                    size="lg"
-                    disabled={!goal.trim() || running}
-                    className="min-w-36"
-                  >
-                    {running ? "Generating…" : "Generate course"}
-                  </Button>
-                  {running ? (
-                    <Button type="button" variant="ghost" onClick={stop}>
-                      Stop
-                    </Button>
-                  ) : null}
-                  {phase !== "idle" && !running ? (
-                    <Button type="button" variant="ghost" onClick={clearView}>
-                      New course
-                    </Button>
-                  ) : null}
-                  {useStyle ? (
-                    <p className="text-xs text-muted-foreground">
-                      Style matching costs ~10 pts faithfulness
-                    </p>
-                  ) : null}
-                </div>
-              </form>
+              <Button
+                onClick={start}
+                disabled={!goal.trim()}
+                className="w-full sm:w-auto"
+              >
+                Build my course
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                Takes about a minute. Sections appear as they&apos;re written,
+                and everything is saved automatically.
+              </p>
             </div>
           </section>
 
-          <div ref={resultsRef} className="space-y-6">
-            {phase !== "idle" ? (
-              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border/60 pb-4">
-                <div>
-                  <p className="font-mono text-[0.65rem] tracking-[0.16em] text-muted-foreground uppercase">
-                    {progressLabel}
-                  </p>
-                  {summary ? (
-                    <p className="mt-1 max-w-2xl text-sm text-foreground/90">
-                      {summary}
-                    </p>
-                  ) : null}
-                  {activeNamespace ? (
-                    <p className="mt-1 font-mono text-xs text-muted-foreground">
-                      namespace · {activeNamespace}
-                      {cost != null ? ` · ~$${cost.toFixed(2)}` : ""}
-                    </p>
-                  ) : null}
-                </div>
-                {running ? (
-                  <div className="h-1 w-28 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {error ? (
-              <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                {error}
-              </p>
-            ) : null}
-
-            <div className="space-y-6">
-              {modules.map((module) => (
-                <ModulePanel key={module.index} module={module} />
-              ))}
+          {error ? (
+            <div className="mt-6">
+              <RunError message={error} onRetry={() => setError(null)} />
             </div>
-          </div>
-        </div>
+          ) : null}
 
-        <div className="pt-14 lg:sticky lg:top-16 lg:pt-20">
-          <HistoryPanel
-            items={history}
-            activeId={activeCourseId}
-            user={historyUser}
-            onSelect={(id) => void openSaved(id)}
-            onDelete={(id) => void onDelete(id)}
-            onRefresh={() => void refreshHistory()}
-          />
-        </div>
-      </div>
+          {!loadingLibrary ? (
+            <div className="mt-12">
+              <LibraryList
+                courses={library}
+                activeId={activeCourseId}
+                onOpen={openCourse}
+                onDelete={removeCourse}
+              />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Button variant="ghost" size="sm" onClick={resetView}>
+              ← All courses
+            </Button>
+            {cost != null ? (
+              <span className="text-sm text-muted-foreground">
+                Cost to build: ${cost.toFixed(2)}
+              </span>
+            ) : null}
+          </div>
+
+          <h1 className="mt-4 font-heading text-2xl tracking-tight text-ink">
+            {goal}
+          </h1>
+          {summary ? (
+            <p className="mt-2 max-w-prose text-muted-foreground">{summary}</p>
+          ) : null}
+
+          <div className="mt-6">
+            <RunStatus
+              phase={phase === "done" && !generatedHere ? "idle" : phase}
+              detail={detail}
+              modulesDone={modulesDone}
+              modulesTotal={modules.length}
+              onCancel={running ? () => abortRef.current?.abort() : undefined}
+            />
+          </div>
+
+          {error ? (
+            <div className="mt-4">
+              <RunError message={error} onRetry={start} />
+            </div>
+          ) : null}
+
+          <div className="mt-6 space-y-6">
+            {modules.map((m) => (
+              <ModulePanel key={m.index} module={m} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
