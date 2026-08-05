@@ -66,11 +66,11 @@
   --secondary: oklch(0.94 0.015 220);
   --secondary-foreground: oklch(0.28 0.03 220);
   --muted: oklch(0.945 0.012 220);
-  --muted-foreground: oklch(0.5 0.02 230);
+  --muted-foreground: oklch(0.44 0.025 235);
   --accent: oklch(0.93 0.02 195);
   --accent-foreground: oklch(0.28 0.04 205);
   --destructive: oklch(0.55 0.2 25);
-  --border: oklch(0.88 0.015 220);
+  --border: oklch(0.855 0.018 220);
   --input: oklch(0.9 0.012 220);
   --ring: oklch(0.5 0.06 205);
   --ink: oklch(0.24 0.025 245);
@@ -107,5 +107,20 @@
   }
   html {
     @apply font-sans;
+    /* Slightly larger base so long reading is comfortable without zooming. */
+    font-size: 17px;
+  }
+  /* Long prose gets a measure: much past 70 characters the eye loses the line. */
+  .measure {
+    max-width: 68ch;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

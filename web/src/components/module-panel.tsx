@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { ModuleState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { AskAbout } from "./ask-about";
 import { CitedText } from "./cited-text";
 import { QuizPanel } from "./quiz-panel";
 
@@ -15,11 +16,22 @@ type Props = {
   read?: boolean;
   onMarkRead?: () => void;
   onVisible?: () => void;
+  /** Needed to ask about a passage; null until the course has been saved. */
+  courseId?: number | null;
+  userId?: string;
 };
 
-export function ModulePanel({ module, read, onMarkRead, onVisible }: Props) {
+export function ModulePanel({
+  module,
+  read,
+  onMarkRead,
+  onVisible,
+  courseId = null,
+  userId,
+}: Props) {
   const [activeCite, setActiveCite] = useState<number | null>(null);
   const articleRef = useRef<HTMLElement>(null);
+  const proseRef = useRef<HTMLDivElement>(null);
   const chunks = module.notes?.chunks;
   const chunkMap = useMemo(
     () => new Map((chunks ?? []).map((c) => [c.id, c])),
@@ -90,11 +102,23 @@ export function ModulePanel({ module, read, onMarkRead, onVisible }: Props) {
       ) : null}
 
       {body ? (
-        <CitedText
-          text={body}
-          activeId={activeCite}
-          onCite={setActiveCite}
-          className="font-notes text-[1.1rem] leading-relaxed text-ink/90"
+        <div ref={proseRef}>
+          <CitedText
+            text={body}
+            activeId={activeCite}
+            onCite={setActiveCite}
+            className="measure font-notes text-[1.08rem] leading-[1.75] text-ink"
+          />
+        </div>
+      ) : null}
+
+      {body && module.status !== "streaming" ? (
+        <AskAbout
+          containerRef={proseRef}
+          courseId={courseId}
+          moduleIndex={module.index}
+          userId={userId}
+          sectionTitle={module.title}
         />
       ) : null}
 

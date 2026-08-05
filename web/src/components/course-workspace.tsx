@@ -712,6 +712,8 @@ export function CourseWorkspace() {
           courseStatus={courseStatus}
           modulesRead={modulesRead}
           activeSection={activeSection}
+          courseId={activeCourseId}
+          userId={userId}
           titleRef={titleRef}
           onBack={resetView}
           onCancel={() => void stopGeneration()}
@@ -744,6 +746,8 @@ function CourseReader({
   courseStatus,
   modulesRead,
   activeSection,
+  courseId,
+  userId,
   titleRef,
   onBack,
   onCancel,
@@ -766,6 +770,8 @@ function CourseReader({
   courseStatus: "generating" | "complete" | "partial" | null;
   modulesRead: number[];
   activeSection: number;
+  courseId: number | null;
+  userId: string;
   titleRef: React.RefObject<HTMLHeadingElement | null>;
   onBack: () => void;
   onCancel: () => void;
@@ -897,6 +903,8 @@ function CourseReader({
             <ModulePanel
               module={m}
               read={modulesRead.includes(m.index)}
+              courseId={courseId}
+              userId={userId}
               onMarkRead={() => onMarkRead(m.index)}
               onVisible={() => {
                 onSelectSection(m.index);
