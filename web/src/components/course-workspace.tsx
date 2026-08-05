@@ -410,6 +410,17 @@ export function CourseWorkspace() {
     }
   }
 
+  // If the uploaded material backing the current choice goes away, fall back to
+  // finding sources. Otherwise the selector hides while still pointing at a
+  // namespace the reader can no longer see or change.
+  useEffect(() => {
+    if (sourceMode === AUTO_SOURCE) return;
+    if (!uploads.some((ns) => ns.namespace === sourceMode)) {
+      setSourceMode(AUTO_SOURCE);
+      setUploadNs(null);
+    }
+  }, [uploads, sourceMode]);
+
   function pickSourceMode(value: string | null) {
     if (!value) return;
     if (value === AUTO_SOURCE) {
@@ -601,44 +612,49 @@ export function CourseWorkspace() {
                 </p>
               </div>
 
-              <div>
-                <Label htmlFor="source" className="text-sm font-medium">
-                  Where should the notes come from?
-                </Label>
-                <Select value={sourceMode} onValueChange={pickSourceMode}>
-                  <SelectTrigger id="source" className="mt-2">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={AUTO_SOURCE}>
-                      Find sources for me
-                    </SelectItem>
-                    {uploads.map((ns) => (
-                      <SelectItem key={ns.namespace} value={ns.namespace}>
-                        {ns.namespace.replace(`user-${userId}-`, "")} (
-                        {ns.documents} files)
+              {/* With nothing uploaded there is only one possible answer, so
+                  the control is noise in front of the primary action. It
+                  appears once there is a real choice to make. */}
+              {uploads.length > 0 ? (
+                <div>
+                  <Label htmlFor="source" className="text-sm font-medium">
+                    Where should the notes come from?
+                  </Label>
+                  <Select value={sourceMode} onValueChange={pickSourceMode}>
+                    <SelectTrigger id="source" className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={AUTO_SOURCE}>
+                        Find sources for me
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="mt-1.5 text-sm text-muted-foreground">
-                  {sourceMode === AUTO_SOURCE ? (
-                    <>
-                      Wikipedia and arXiv for this topic. To use your own PDFs,
-                      add them under{" "}
-                      <Link
-                        href="/upload"
-                        className="font-medium text-primary underline-offset-4 hover:underline"
-                      >
-                        Materials
-                      </Link>
-                      .
-                    </>
-                  ) : (
-                    "Notes will be written only from your indexed materials."
-                  )}
+                      {uploads.map((ns) => (
+                        <SelectItem key={ns.namespace} value={ns.namespace}>
+                          My material: {ns.namespace.replace(`user-${userId}-`, "")} (
+                          {ns.documents} file{ns.documents === 1 ? "" : "s"})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1.5 text-sm text-muted-foreground">
+                    {sourceMode === AUTO_SOURCE
+                      ? "Wikipedia and arXiv for this topic."
+                      : "Notes will be written only from your own files."}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Sources come from Wikipedia and arXiv. To study from your own
+                  PDFs instead, add them under{" "}
+                  <Link
+                    href="/upload"
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Materials
+                  </Link>
+                  .
                 </p>
-              </div>
+              )}
 
               <fieldset className="space-y-2.5">
                 <legend className="text-sm font-medium">Options</legend>
