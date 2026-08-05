@@ -8,6 +8,7 @@ import { ContinueCard } from "@/components/continue-card";
 import { LibraryList } from "@/components/library-list";
 import { ModulePanel } from "@/components/module-panel";
 import { RunError, RunStatus, type RunPhase } from "@/components/run-status";
+import { SectionRail } from "@/components/section-rail";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -561,7 +562,14 @@ export function CourseWorkspace() {
   const showHome = !running && !viewingCourse;
 
   return (
-    <div id="main" className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+    <div
+      id="main"
+      className={
+        showHome
+          ? "mx-auto w-full max-w-3xl px-4 py-10 sm:px-6"
+          : "mx-auto w-full max-w-5xl px-4 py-10 sm:px-6"
+      }
+    >
       {showHome ? (
         <>
           <p className="font-heading text-4xl tracking-tight text-ink sm:text-5xl">
@@ -835,81 +843,19 @@ function CourseReader({
         <p className="mt-2 max-w-prose text-muted-foreground">{summary}</p>
       ) : null}
 
-      {modules.length > 1 ? (
-        <nav aria-label="Sections" className="mt-6 overflow-x-auto">
-          <ol className="flex gap-1.5 pb-1">
-            {modules.map((m) => {
-              const read = modulesRead.includes(m.index);
-              const active = m.index === activeSection;
-              return (
-                <li key={m.index}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectSection(m.index);
-                      onBookmark(m.index);
-                      document
-                        .getElementById(`section-${m.index}`)
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }}
-                    className={[
-                      "rounded-md px-2.5 py-1.5 font-mono text-xs transition-colors",
-                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : read
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted/80 text-muted-foreground hover:bg-muted",
-                    ].join(" ")}
-                  >
-                    {m.index + 1}
-                    <span className="sr-only">: {m.title}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
-      ) : null}
+      <div className="mt-6 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
+        <SectionRail
+          modules={modules}
+          activeIndex={activeSection}
+          readIndices={modulesRead}
+          onSelect={(index) => {
+            onSelectSection(index);
+            onBookmark(index);
+          }}
+        />
 
-      {showRunStatus ? (
-        <div className="mt-6">
-          <RunStatus
-            phase={
-              courseStatus === "generating" && !running ? "writing" : phase
-            }
-            detail={
-              detail ||
-              (courseStatus === "generating"
-                ? "Writing continues in the background."
-                : "")
-            }
-            modulesDone={modulesDone}
-            modulesTotal={modules.length}
-            onCancel={
-              running || courseStatus === "generating" ? onCancel : undefined
-            }
-          />
-        </div>
-      ) : null}
-
-      {courseStatus === "partial" && !running ? (
-        <p
-          role="status"
-          className="mt-4 rounded-lg border border-amber-700/20 bg-amber-50/80 px-3 py-2 text-sm text-amber-950"
-        >
-          Generation paused. Sections that finished are saved — resume anytime
-          to complete the rest.
-        </p>
-      ) : null}
-
-      {error ? (
-        <div className="mt-4">
-          <RunError message={error} onRetry={onRetry} />
-        </div>
-      ) : null}
-
-      <div className="mt-8 space-y-10">
+        <div className="min-w-0">
+          <div className="space-y-10">
         {modules.map((m) => (
           <div
             key={m.index}
@@ -928,6 +874,8 @@ function CourseReader({
             />
           </div>
         ))}
+          </div>
+        </div>
       </div>
     </>
   );

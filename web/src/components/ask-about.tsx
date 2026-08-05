@@ -146,10 +146,11 @@ export function AskAbout({
             type="button"
             variant="ghost"
             size="sm"
-            className="text-muted-foreground hover:text-foreground"
+            // Buttons default to nowrap; this label is wider than a phone.
+            className="h-auto max-w-full whitespace-normal py-1.5 text-left text-muted-foreground hover:text-foreground"
             onClick={() => open(sectionTitle)}
           >
-            Stuck on something? Highlight it, or ask about this section
+            Stuck? Ask about this section
           </Button>
         ) : (
           <div

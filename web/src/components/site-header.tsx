@@ -41,7 +41,7 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="relative z-10 border-b border-border/70 bg-background/75 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-md">
       <a
         href="#main"
         className="sr-only rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
@@ -49,7 +49,7 @@ export function SiteHeader() {
         Skip to content
       </a>
 
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
         <Link
           href="/"
           className="font-heading text-lg tracking-tight text-ink transition-colors hover:text-primary"
@@ -57,7 +57,7 @@ export function SiteHeader() {
           NoteKit
         </Link>
 
-        <nav aria-label="Main" className="flex items-center gap-0.5">
+        <nav aria-label="Main" className="flex min-w-0 items-center gap-0.5">
           {LINKS.map((link) => {
             const active =
               link.href === "/"
@@ -109,7 +109,7 @@ export function SiteHeader() {
               type="button"
               variant="ghost"
               size="sm"
-              className="text-foreground/60"
+              className="max-w-[7rem] truncate text-foreground/60"
               onClick={() => {
                 setDraft(profile?.name ?? "");
                 setEditing(true);
@@ -122,7 +122,7 @@ export function SiteHeader() {
           <span
             role="status"
             className={cn(
-              "ml-1 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[0.7rem]",
+              "ml-1 hidden items-center gap-1.5 rounded-md border px-2 py-0.5 text-[0.7rem] sm:inline-flex",
               ok === true && "border-teal-800/20 bg-teal-50/80 text-teal-900",
               ok === false &&
                 "border-destructive/40 bg-destructive/5 text-destructive",
