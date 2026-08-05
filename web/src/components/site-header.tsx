@@ -41,7 +41,7 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-md lg:hidden">
       <a
         href="#main"
         className="sr-only rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2"

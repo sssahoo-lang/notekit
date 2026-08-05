@@ -79,7 +79,7 @@ export function ContinueCard({
         </p>
       ) : null}
 
-      {total > 0 ? (
+      {total > 0 && (generating || read > 0) ? (
         <div
           className="mt-4 h-1.5 overflow-hidden rounded-full bg-primary/12"
           role="progressbar"

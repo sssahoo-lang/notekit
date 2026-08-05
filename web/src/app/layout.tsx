@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { DM_Sans, Fraunces, IBM_Plex_Mono, Source_Serif_4 } from "next/font/google";
 
+import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
+import { CourseNavProvider } from "@/lib/course-nav";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
@@ -39,9 +41,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${sans.variable} ${heading.variable} ${notes.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">
-        <SiteHeader />
-        <main className="flex flex-1 flex-col">{children}</main>
+      <body className="min-h-full">
+        <CourseNavProvider>
+          {/* Sidebar on wide screens; the top header takes over below lg. */}
+          <div className="flex min-h-screen">
+            <AppSidebar />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <SiteHeader />
+              <main className="flex flex-1 flex-col">{children}</main>
+            </div>
+          </div>
+        </CourseNavProvider>
         <Toaster position="bottom-right" />
       </body>
     </html>

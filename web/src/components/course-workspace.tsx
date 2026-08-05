@@ -36,6 +36,7 @@ import {
   generationStatus,
   pickContinueCourse,
 } from "@/lib/course-status";
+import { useCourseNav } from "@/lib/course-nav";
 import {
   claimAliases,
   getProfile,
@@ -218,12 +219,28 @@ export function CourseWorkspace() {
   const [activeSection, setActiveSection] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const nav = useCourseNav();
 
   const userId = profile?.id ?? "anonymous";
   const uploads = useMemo(
     () => (profile ? myUploads(sources, profile.id) : []),
     [sources, profile],
   );
+
+  // The sidebar owns navigation now: it asks for a course, this answers.
+  useEffect(() => {
+    if (nav.requestedCourseId == null) return;
+    const id = nav.requestedCourseId;
+    nav.clearRequest();
+    void openCourse(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav.requestedCourseId]);
+
+  useEffect(() => {
+    if (nav.homeToken === 0) return;
+    resetView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav.homeToken]);
 
   const refreshLibrary = useCallback(async (p: Profile) => {
     try {
@@ -232,6 +249,7 @@ export function CourseWorkspace() {
         ? await claimCourses(p.id, aliases)
         : await listCourses(p.id);
       setLibrary(libraryRows);
+      nav.refreshLibrary();
       return libraryRows;
     } catch {
       setLibrary([]);
@@ -566,16 +584,14 @@ export function CourseWorkspace() {
       id="main"
       className={
         showHome
-          ? "mx-auto w-full max-w-3xl px-4 py-10 sm:px-6"
+          ? "mx-auto w-full max-w-6xl px-4 py-10 sm:px-6"
           : "mx-auto w-full max-w-5xl px-4 py-10 sm:px-6"
       }
     >
       {showHome ? (
-        <>
-          <p className="font-heading text-4xl tracking-tight text-ink sm:text-5xl">
-            NoteKit
-          </p>
-          <h1 className="mt-3 text-xl text-ink/90 sm:text-2xl">
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-12">
+          <div className="min-w-0">
+          <h1 className="font-heading text-3xl tracking-tight text-ink">
             {profile?.name
               ? `Welcome back, ${greetingName(profile)}`
               : "What do you want to learn?"}
@@ -710,8 +726,10 @@ export function CourseWorkspace() {
             </div>
           ) : null}
 
+          </div>
+
           {!loadingLibrary ? (
-            <div className="mt-12">
+            <div className="mt-12 lg:mt-0">
               <LibraryList
                 courses={library}
                 activeId={activeCourseId}
@@ -720,7 +738,7 @@ export function CourseWorkspace() {
               />
             </div>
           ) : null}
-        </>
+        </div>
       ) : (
         <CourseReader
           goal={goal}
