@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import type { ModuleState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -13,10 +12,14 @@ import { QuizPanel } from "./quiz-panel";
 
 type Props = {
   module: ModuleState;
+  read?: boolean;
+  onMarkRead?: () => void;
+  onVisible?: () => void;
 };
 
-export function ModulePanel({ module }: Props) {
+export function ModulePanel({ module, read, onMarkRead, onVisible }: Props) {
   const [activeCite, setActiveCite] = useState<number | null>(null);
+  const articleRef = useRef<HTMLElement>(null);
   const chunks = module.notes?.chunks;
   const chunkMap = useMemo(
     () => new Map((chunks ?? []).map((c) => [c.id, c])),
@@ -31,17 +34,40 @@ export function ModulePanel({ module }: Props) {
       ? module.streamingText
       : "");
 
+  const showEmptyBody =
+    module.status === "done" &&
+    !module.notes?.refused &&
+    !module.error &&
+    !body.trim();
+
+  const canMarkRead =
+    onMarkRead &&
+    !read &&
+    (module.status === "done" || module.status === "refused");
+
+  useEffect(() => {
+    if (!onVisible || !articleRef.current) return;
+    const node = articleRef.current;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) onVisible();
+      },
+      { rootMargin: "-30% 0px -50% 0px", threshold: 0 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onVisible]);
+
   return (
     <article
-      className={cn(
-        "animate-in fade-in slide-in-from-bottom-2 duration-500",
-        "rounded-2xl border border-border/70 bg-paper px-5 py-6 shadow-sm sm:px-8 sm:py-8",
-      )}
+      ref={articleRef}
+      className="rounded-2xl border border-border/50 bg-paper/70 px-5 py-8 shadow-[0_1px_0_oklch(0.9_0.01_95)] sm:px-8"
     >
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <p className="font-mono text-[0.7rem] tracking-[0.14em] text-muted-foreground uppercase">
             Section {module.index + 1}
+            {read ? " · read" : ""}
           </p>
           <h2 className="font-heading mt-1 text-2xl tracking-tight text-ink">
             {module.title}
@@ -68,75 +94,86 @@ export function ModulePanel({ module }: Props) {
           text={body}
           activeId={activeCite}
           onCite={setActiveCite}
-          className="font-notes text-[1.05rem] text-ink/90"
+          className="font-notes text-[1.1rem] leading-relaxed text-ink/90"
         />
       ) : null}
 
+      {showEmptyBody ? (
+        <p className="text-sm text-muted-foreground">
+          No notes were saved for this section.
+        </p>
+      ) : null}
+
       {module.status === "streaming" && !body ? (
-        <p className="text-sm text-muted-foreground">Retrieving sources…</p>
+        <p className="text-sm text-muted-foreground">Writing notes…</p>
       ) : null}
 
       {module.status === "streaming" && body ? (
-        <span className="mt-2 inline-block h-4 w-1.5 animate-pulse bg-primary/70 align-middle" />
+        <span
+          className="mt-2 inline-block h-4 w-1.5 animate-pulse bg-primary/70 align-middle"
+          aria-hidden="true"
+        />
       ) : null}
 
-      {module.notes && !module.notes.refused ? (
-        <>
-          <Separator className="my-7" />
-          <Tabs defaultValue={module.notes.quiz ? "quiz" : "sources"}>
-            <TabsList>
-              {module.notes.quiz ? (
-                <TabsTrigger value="quiz">Quiz</TabsTrigger>
-              ) : null}
-              <TabsTrigger value="sources">
-                Sources ({chunkList.length})
-              </TabsTrigger>
-            </TabsList>
-            {module.notes.quiz ? (
-              <TabsContent value="quiz" className="mt-5">
-                <QuizPanel quiz={module.notes.quiz} onCite={setActiveCite} />
-              </TabsContent>
-            ) : null}
-            <TabsContent value="sources" className="mt-5 space-y-3">
-              {chunkList.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No passages.</p>
-              ) : (
-                chunkList.map((chunk) => (
-                  <button
-                    key={chunk.id}
-                    type="button"
-                    onClick={() => setActiveCite(chunk.id)}
-                    className={cn(
-                      "block w-full rounded-xl border px-4 py-3 text-left transition-colors",
-                      activeCite === chunk.id
-                        ? "border-cite/50 bg-cite/10"
-                        : "border-border/70 bg-background/50 hover:border-cite/30",
-                    )}
-                  >
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="font-mono">
-                        c{chunk.id}
-                      </Badge>
-                      <span className="text-sm font-medium">
-                        {chunk.document_title}
-                      </span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        score {chunk.score.toFixed(2)}
-                      </span>
-                    </div>
-                    <p className="line-clamp-3 text-sm text-muted-foreground">
-                      {chunk.text}
-                    </p>
-                  </button>
-                ))
-              )}
-            </TabsContent>
-          </Tabs>
-        </>
+      {module.status === "pending" && !body ? (
+        <p className="text-sm text-muted-foreground">Waiting to write…</p>
+      ) : null}
+
+      {canMarkRead ? (
+        <div className="mt-6">
+          <Button type="button" variant="secondary" size="sm" onClick={onMarkRead}>
+            Mark as read
+          </Button>
+        </div>
+      ) : null}
+
+      {module.notes?.quiz && !module.notes.refused ? (
+        <div className="mt-8">
+          <QuizPanel quiz={module.notes.quiz} onCite={setActiveCite} />
+        </div>
+      ) : null}
+
+      {chunkList.length > 0 && !module.notes?.refused ? (
+        <details className="mt-8 group">
+          <summary className="cursor-pointer list-none text-sm font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <span className="underline-offset-4 group-open:no-underline">
+              Where this came from
+            </span>
+            <span className="ml-1.5 font-normal">({chunkList.length})</span>
+          </summary>
+          <ul className="mt-3 space-y-2">
+            {chunkList.map((chunk) => (
+              <li key={chunk.id}>
+                <button
+                  type="button"
+                  onClick={() => setActiveCite(chunk.id)}
+                  className={cn(
+                    "block w-full rounded-xl border px-4 py-3 text-left transition-colors",
+                    activeCite === chunk.id
+                      ? "border-cite/50 bg-cite/10"
+                      : "border-border/70 bg-background/50 hover:border-cite/30",
+                  )}
+                >
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="font-mono">
+                      c{chunk.id}
+                    </Badge>
+                    <span className="text-sm font-medium">
+                      {chunk.document_title}
+                    </span>
+                  </div>
+                  <p className="line-clamp-3 text-sm text-muted-foreground">
+                    {chunk.text}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
       {activeChunk ? (
-        <aside className="mt-6 rounded-xl border border-cite/30 bg-cite/8 px-4 py-3">
+        <aside className="mt-4 rounded-xl border border-cite/30 bg-cite/8 px-4 py-3">
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <Badge className="bg-cite text-cite-foreground hover:bg-cite">
               c{activeChunk.id}
@@ -172,12 +209,12 @@ function StatusBadge({ module }: { module: ModuleState }) {
     case "refused":
       return (
         <Badge variant="outline" className="border-amber-700/30 text-amber-900">
-          Refused
+          Couldn&apos;t cover
         </Badge>
       );
     case "error":
       return <Badge variant="destructive">Error</Badge>;
     case "done":
-      return <Badge variant="secondary">Done</Badge>;
+      return null;
   }
 }

@@ -62,7 +62,7 @@ export function RunStatus({
         aria-live="polite"
         className="text-sm font-medium text-teal-900"
       >
-        Your notes are ready. They&apos;re saved — you can close this and come back to them.
+        Your notes are ready and saved — come back anytime from History.
       </p>
     );
   }

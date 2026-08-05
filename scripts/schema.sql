@@ -60,7 +60,11 @@ CREATE TABLE IF NOT EXISTS courses (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Which modules have been read, and where the reader left off.
     progress            JSONB NOT NULL DEFAULT '{}',
-    opened_at           TIMESTAMPTZ
+    opened_at           TIMESTAMPTZ,
+    -- generating | complete | partial — so History can show in-flight courses.
+    generation_status   TEXT NOT NULL DEFAULT 'complete',
+    -- Planner output kept so a partial course can resume without re-planning.
+    syllabus            JSONB
 );
 
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx

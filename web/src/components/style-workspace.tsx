@@ -55,28 +55,28 @@ export function StyleWorkspace() {
         Writing style
       </h1>
       <p className="mt-2 max-w-prose text-muted-foreground">
-        Paste something you wrote and NoteKit learns how you write — how long
-        your sentences run, how formal you are, whether you reach for analogies.
-        New courses can then be written in that voice, which is easier to read
-        than generic explanation.
+        Paste something you wrote and NoteKit learns how you write — sentence
+        length, formality, analogies. New courses can then use that voice.
       </p>
 
-      <div className="mt-4 rounded-xl border border-amber-800/25 bg-amber-50/60 p-4">
+      <div className="mt-4 rounded-xl border border-amber-800/20 bg-amber-50/70 p-4">
         <p className="text-sm text-amber-950">
-          <strong className="font-medium">Worth knowing:</strong> notes written
-          in your style are measurably less strictly grounded — around 10% more
-          of their claims stray from the sources, mostly through analogies. It
-          stays off unless you tick the box when building a course.
+          <strong className="font-medium">Worth knowing:</strong> notes in your
+          style are a bit less strictly grounded — roughly 10% more claims stray
+          via analogies. The option only appears on Study after you save a
+          profile here.
         </p>
       </div>
 
       <p className="mt-4 text-sm text-muted-foreground">
-        Only the description of your writing is kept. The sample itself is used
-        once and never stored, and it never influences what your notes claim —
-        only how they read.
+        Only a description of your writing is kept. The sample is used once and
+        never stored.
       </p>
 
-      <form onSubmit={onLearn} className="mt-8 space-y-4">
+      <form
+        onSubmit={onLearn}
+        className="mt-8 space-y-4 rounded-2xl border border-border/80 bg-card/90 p-5 sm:p-6"
+      >
         <div className="space-y-2">
           <Label htmlFor="sample">Something you wrote</Label>
           <Textarea

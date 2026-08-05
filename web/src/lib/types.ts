@@ -21,6 +21,8 @@ export type CourseProgress = {
   bookmark?: { module_index: number; anchor?: string } | null;
 };
 
+export type GenerationStatus = "generating" | "complete" | "partial";
+
 export type SavedCourseSummary = {
   id: number;
   user_id: string;
@@ -29,9 +31,14 @@ export type SavedCourseSummary = {
   namespace: string;
   module_titles: string[];
   module_count: number;
+  /** Planned section count from the syllabus. */
+  planned_count?: number;
+  /** Sections that actually have readable notes (not refused/empty). */
+  usable_count?: number;
   estimated_cost_usd: number | null;
   with_quiz: boolean;
   used_style: boolean;
+  generation_status?: GenerationStatus;
   created_at: string;
   progress?: CourseProgress;
   opened_at?: string | null;
@@ -46,6 +53,7 @@ export type SavedModule = {
 
 export type SavedCourse = SavedCourseSummary & {
   modules: SavedModule[];
+  syllabus?: unknown;
 };
 
 export type Chunk = {
@@ -105,6 +113,7 @@ export type CourseEvent =
       summary: string;
       namespace: string;
       modules: string[];
+      syllabus?: unknown;
     }
   | { type: "ingesting"; namespace: string }
   | { type: "ingested"; cached: boolean; chunks: number }
@@ -117,6 +126,7 @@ export type CourseEvent =
       estimated_cost_usd: number;
       usage: UsageEntry[];
     }
+  | { type: "cancelled" }
   | { type: "saved"; id: number }
   | { type: "error"; error: string };
 

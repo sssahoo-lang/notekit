@@ -12,7 +12,7 @@ source material, with every claim cited back to the passage it came from.
 | 3. Quiz generation | working; does not yet reuse the notes cache |
 | 4. Upload adapter, per-user namespaces, style matching | working |
 | 5. Open-domain routing | not started |
-| 6. Next.js UI | not started |
+| 6. Next.js UI | working locally (`web/`) |
 | 7. Deploy | not started |
 
 ## Measured results
@@ -101,17 +101,30 @@ uv run notekit eval --syllabus fixtures/q-learning.json --repeat 3 --explain
 uv run notekit calibrate evalsets/q-learning.json
 ```
 
+## Web UI
+
+```bash
+# --reload-dir src keeps .venv package churn from killing long course runs
+uv run uvicorn notekit.api:app --reload --reload-dir src --port 8000
+cd web && cp .env.local.example .env.local && npm install && npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Course generation streams
+over SSE; Upload and Style pages cover the milestone-4 surfaces. Details in
+[`web/README.md`](web/README.md).
+
 ## HTTP API
 
 ```bash
-uv run uvicorn notekit.api:app --reload --port 8000
+uv run uvicorn notekit.api:app --reload --reload-dir src --port 8000
 ```
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/health` | Liveness plus database connectivity |
 | `GET /api/namespaces` | Indexed namespaces with document and chunk counts |
-| `POST /api/course` | Generate a course, streamed as SSE |
+| `POST /api/course` | Generate a course, streamed as SSE; saves to history on completion |
+| `GET /api/courses` · `GET/DELETE /api/courses/{id}` | Saved course history (by trust-based user id) |
 | `POST /api/plan` | Plan a syllabus without generating |
 | `GET /api/search` | Inspect what retrieval returns |
 | `POST /api/upload` | Index uploaded files into a user namespace |

@@ -1,14 +1,15 @@
 /**
  * Who this browser is, without asking anyone to type an identity.
  *
- * The old model was a free-text "user id" field matched exactly, so a capital
- * letter or a stray space silently gave you a different, empty history. Now the
- * browser holds one stable id and an optional display name, and the id is the
- * only thing sent to the API.
+ * The browser holds one stable id and an optional display name; the id is the
+ * only thing sent to the API. Cleared localStorage used to mint a brand-new
+ * `reader-…` id and hide every saved course — we keep a durable list of ids
+ * this browser has ever used so those courses can be claimed back.
  */
 
 const KEY = "notekit.profile";
 const LEGACY_KEY = "notekit.user";
+const IDS_KEY = "notekit.profile.ids";
 
 export type Profile = {
   /** Stable storage key. Never shown; never typed. */
@@ -37,6 +38,35 @@ function createId(): string {
   return `reader-${random}`;
 }
 
+function rememberedIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(IDS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === "string" && !!x)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberId(id: string): void {
+  if (typeof window === "undefined" || !id) return;
+  const ids = rememberedIds();
+  if (ids.includes(id)) return;
+  localStorage.setItem(IDS_KEY, JSON.stringify([...ids, id]));
+}
+
+/** Every id this browser has used, plus the normalised display name if set. */
+export function claimAliases(profile: Profile): string[] {
+  const aliases = new Set<string>(rememberedIds());
+  aliases.add(profile.id);
+  if (profile.name.trim()) aliases.add(normalizeId(profile.name));
+  aliases.delete(profile.id);
+  return [...aliases];
+}
+
 /**
  * The profile for this browser, creating one on first visit.
  *
@@ -51,7 +81,10 @@ export function getProfile(): Profile {
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as Partial<Profile>;
-      if (parsed.id) return { id: parsed.id, name: parsed.name ?? "" };
+      if (parsed.id) {
+        rememberId(parsed.id);
+        return { id: parsed.id, name: parsed.name ?? "" };
+      }
     } catch {
       // Corrupt entry: fall through and mint a fresh profile rather than
       // leaving the reader stuck on a broken one.
@@ -59,11 +92,17 @@ export function getProfile(): Profile {
   }
 
   const legacy = localStorage.getItem(LEGACY_KEY)?.trim();
-  const profile: Profile = legacy
-    ? { id: normalizeId(legacy), name: legacy }
-    : { id: createId(), name: "" };
+  const known = rememberedIds();
+  // Prefer a previously used id over minting a new empty one.
+  const profile: Profile =
+    legacy
+      ? { id: normalizeId(legacy), name: legacy }
+      : known.length
+        ? { id: known[0], name: "" }
+        : { id: createId(), name: "" };
 
   localStorage.setItem(KEY, JSON.stringify(profile));
+  rememberId(profile.id);
   if (legacy) localStorage.removeItem(LEGACY_KEY);
   return profile;
 }
@@ -73,6 +112,8 @@ export function setDisplayName(name: string): Profile {
   const next: Profile = { ...current, name: name.trim() };
   if (typeof window !== "undefined") {
     localStorage.setItem(KEY, JSON.stringify(next));
+    rememberId(next.id);
+    if (next.name) rememberId(normalizeId(next.name));
   }
   return next;
 }

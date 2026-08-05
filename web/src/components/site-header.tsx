@@ -11,11 +11,10 @@ import { getHealth } from "@/lib/api";
 import { getProfile, setDisplayName, type Profile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
 
-// Labels name what the reader does, not what the backend calls it.
 const LINKS = [
   { href: "/", label: "Study" },
-  { href: "/upload", label: "Your material" },
-  { href: "/style", label: "Writing style" },
+  { href: "/upload", label: "Materials" },
+  { href: "/style", label: "Style" },
 ];
 
 export function SiteHeader() {
@@ -42,7 +41,7 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="relative z-10 border-b border-border bg-background/80 backdrop-blur-md">
+    <header className="relative z-10 border-b border-border/70 bg-background/75 backdrop-blur-md">
       <a
         href="#main"
         className="sr-only rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
@@ -50,14 +49,15 @@ export function SiteHeader() {
         Skip to content
       </a>
 
-      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" className="group flex items-baseline gap-2">
-          <span className="font-heading text-xl tracking-tight text-ink transition-colors group-hover:text-primary">
-            NoteKit
-          </span>
+      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+        <Link
+          href="/"
+          className="font-heading text-lg tracking-tight text-ink transition-colors hover:text-primary"
+        >
+          NoteKit
         </Link>
 
-        <nav aria-label="Main" className="flex items-center gap-1">
+        <nav aria-label="Main" className="flex items-center gap-0.5">
           {LINKS.map((link) => {
             const active =
               link.href === "/"
@@ -69,11 +69,11 @@ export function SiteHeader() {
                 href={link.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-md px-3 py-2 text-sm transition-colors",
+                  "rounded-md px-2.5 py-1.5 text-sm transition-colors",
                   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                   active
                     ? "bg-primary/10 font-medium text-primary"
-                    : "text-foreground/70 hover:bg-muted hover:text-foreground",
+                    : "text-foreground/65 hover:bg-muted hover:text-foreground",
                 )}
               >
                 {link.label}
@@ -81,7 +81,7 @@ export function SiteHeader() {
             );
           })}
 
-          <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+          <span className="mx-1.5 h-4 w-px bg-border" aria-hidden="true" />
 
           {editing ? (
             <span className="flex items-center gap-1.5">
@@ -93,7 +93,7 @@ export function SiteHeader() {
                 autoFocus
                 value={draft}
                 placeholder="Your name"
-                className="h-8 w-32 text-sm"
+                className="h-8 w-28 text-sm"
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") save();
@@ -109,22 +109,23 @@ export function SiteHeader() {
               type="button"
               variant="ghost"
               size="sm"
-              className="text-foreground/70"
+              className="text-foreground/60"
               onClick={() => {
                 setDraft(profile?.name ?? "");
                 setEditing(true);
               }}
             >
-              {profile?.name?.trim() || "Add your name"}
+              {profile?.name?.trim() || "Name"}
             </Button>
           )}
 
           <span
             role="status"
             className={cn(
-              "ml-1 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
-              ok === true && "border-teal-800/25 bg-teal-50 text-teal-900",
-              ok === false && "border-destructive/40 bg-destructive/5 text-destructive",
+              "ml-1 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[0.7rem]",
+              ok === true && "border-teal-800/20 bg-teal-50/80 text-teal-900",
+              ok === false &&
+                "border-destructive/40 bg-destructive/5 text-destructive",
               ok === null && "border-border text-muted-foreground",
             )}
           >
@@ -137,7 +138,9 @@ export function SiteHeader() {
                 ok === null && "animate-pulse bg-muted-foreground",
               )}
             />
-            {ok === true ? "Connected" : ok === false ? "Offline" : "Checking"}
+            <span className="sr-only sm:not-sr-only">
+              {ok === true ? "Connected" : ok === false ? "Offline" : "…"}
+            </span>
           </span>
         </nav>
       </div>
@@ -148,8 +151,8 @@ export function SiteHeader() {
           className="border-t border-destructive/25 bg-destructive/5 px-4 py-2 text-center text-sm text-destructive"
         >
           Can&apos;t reach the NoteKit service. Start it with{" "}
-          <code className="font-mono">
-            uv run uvicorn notekit.api:app --port 8000
+          <code className="font-mono text-xs">
+            uv run uvicorn notekit.api:app --reload --reload-dir src --port 8000
           </code>
         </p>
       ) : null}

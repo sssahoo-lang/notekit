@@ -342,17 +342,25 @@ async def arun_course_events(
     with_quiz: bool = False,
     namespace: str | None = None,
     style: StyleProfile | None = None,
+    cancel_event: asyncio.Event | None = None,
+    only_indices: set[int] | None = None,
 ) -> AsyncIterator[dict]:
     """Plan, then stream every module concurrently as coroutines.
 
     Modules run on one event loop rather than in a thread pool. Streaming is
     I/O-bound but its SSE parsing is Python work, so threads contended on the
     GIL and staggered each other's first token by seconds; coroutines do not.
+
+    `cancel_event` stops workers when set (explicit Stop). Leaving the SSE
+    stream does not set it — background jobs keep writing.
+
+    `only_indices` regenerates a subset (resume of a partial course).
     """
     cfg = cfg or config.EMBEDDING
 
-    yield {"type": "planning"}
-    syllabus = syllabus or await asyncio.to_thread(plan_syllabus, goal)
+    if syllabus is None:
+        yield {"type": "planning"}
+        syllabus = await asyncio.to_thread(plan_syllabus, goal)
 
     if namespace:
         skip_ingest = True
@@ -363,6 +371,7 @@ async def arun_course_events(
         "summary": syllabus.summary,
         "namespace": namespace,
         "modules": [m.title for m in syllabus.modules],
+        "syllabus": syllabus.model_dump(),
     }
 
     if not skip_ingest:
@@ -386,7 +395,22 @@ async def arun_course_events(
 
     await asyncio.to_thread(embedding.warm, cfg)
 
-    for index, module in enumerate(syllabus.modules):
+    indices = (
+        only_indices
+        if only_indices is not None
+        else set(range(len(syllabus.modules)))
+    )
+    work = [(i, m) for i, m in enumerate(syllabus.modules) if i in indices]
+    if not work:
+        entries, cost = llm.usage_report()
+        yield {
+            "type": "done",
+            "estimated_cost_usd": round(cost, 4),
+            "usage": [e.model_dump() for e in entries],
+        }
+        return
+
+    for index, module in work:
         yield {"type": "module_start", "index": index, "title": module.title}
 
     events: asyncio.Queue = asyncio.Queue()
@@ -409,22 +433,33 @@ async def arun_course_events(
         finally:
             await events.put({"type": "_worker_done"})
 
-    tasks = [
-        asyncio.create_task(worker(i, m)) for i, m in enumerate(syllabus.modules)
-    ]
-    remaining = len(syllabus.modules)
+    tasks = [asyncio.create_task(worker(i, m)) for i, m in work]
+    remaining = len(tasks)
+    cancelled = False
     try:
         while remaining:
-            event = await events.get()
+            if cancel_event is not None and cancel_event.is_set():
+                cancelled = True
+                break
+            try:
+                event = await asyncio.wait_for(events.get(), timeout=0.4)
+            except TimeoutError:
+                continue
             if event["type"] == "_worker_done":
                 remaining -= 1
                 continue
             yield event
     finally:
-        # A client that disconnects mid-stream must not leave modules generating.
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        if cancelled:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        else:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    if cancelled:
+        yield {"type": "cancelled"}
+        return
 
     entries, cost = llm.usage_report()
     yield {

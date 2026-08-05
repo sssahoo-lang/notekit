@@ -52,6 +52,24 @@ export async function listCourses(
   return res.json();
 }
 
+/** Pull courses saved under older browser ids onto the current identity. */
+export async function claimCourses(
+  user: string,
+  aliases: string[],
+): Promise<SavedCourseSummary[]> {
+  const res = await fetch(`${API_BASE}/api/courses/claim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user, aliases }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as {
+    moved: number;
+    courses: SavedCourseSummary[];
+  };
+  return data.courses;
+}
+
 export async function getCourse(id: number): Promise<SavedCourse> {
   const res = await fetch(`${API_BASE}/api/courses/${id}`, {
     cache: "no-store",
@@ -84,6 +102,13 @@ export async function saveProgress(
       modules_read: progress.modules_read ?? [],
       bookmark: progress.bookmark ?? null,
     }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function cancelCourse(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/courses/${id}/cancel`, {
+    method: "POST",
   });
   if (!res.ok) throw new Error(await readError(res));
 }
@@ -150,19 +175,9 @@ export async function uploadFiles(
   return res.json();
 }
 
-/** Parse an SSE body from POST /api/course into typed events. */
-export async function* streamCourse(
-  request: CourseRequest,
-  signal?: AbortSignal,
+async function* readSseStream(
+  res: Response,
 ): AsyncGenerator<CourseEvent> {
-  const res = await fetch(`${API_BASE}/api/course`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify(request),
-    signal,
-  });
-
-  if (!res.ok) throw new Error(await readError(res));
   if (!res.body) throw new Error("No response body from course stream");
 
   const reader = res.body.getReader();
@@ -195,4 +210,35 @@ export async function* streamCourse(
       yield JSON.parse(payload) as CourseEvent;
     }
   }
+}
+
+/** Parse an SSE body from POST /api/course into typed events. */
+export async function* streamCourse(
+  request: CourseRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<CourseEvent> {
+  const res = await fetch(`${API_BASE}/api/course`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify(request),
+    signal,
+  });
+
+  if (!res.ok) throw new Error(await readError(res));
+  yield* readSseStream(res);
+}
+
+/** Resume missing modules for a partial course. */
+export async function* resumeCourse(
+  id: number,
+  signal?: AbortSignal,
+): AsyncGenerator<CourseEvent> {
+  const res = await fetch(`${API_BASE}/api/courses/${id}/resume`, {
+    method: "POST",
+    headers: { Accept: "text/event-stream" },
+    signal,
+  });
+
+  if (!res.ok) throw new Error(await readError(res));
+  yield* readSseStream(res);
 }
