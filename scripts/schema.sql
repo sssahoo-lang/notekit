@@ -44,9 +44,30 @@ CREATE TABLE IF NOT EXISTS style_profiles (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Finished courses, so reopening the UI does not regenerate (and re-bill).
+-- user_id is trust-based, same model as uploads — isolation, not auth.
+CREATE TABLE IF NOT EXISTS courses (
+    id                  BIGSERIAL PRIMARY KEY,
+    user_id             TEXT NOT NULL DEFAULT '',
+    goal                TEXT NOT NULL,
+    summary             TEXT NOT NULL DEFAULT '',
+    namespace           TEXT NOT NULL,
+    module_titles       JSONB NOT NULL DEFAULT '[]',
+    modules             JSONB NOT NULL DEFAULT '[]',
+    estimated_cost_usd  DOUBLE PRECISION,
+    with_quiz           BOOLEAN NOT NULL DEFAULT false,
+    used_style          BOOLEAN NOT NULL DEFAULT false,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Which modules have been read, and where the reader left off.
+    progress            JSONB NOT NULL DEFAULT '{}',
+    opened_at           TIMESTAMPTZ
+);
+
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx
     ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_tsv_idx
     ON chunks USING gin (tsv);
 CREATE INDEX IF NOT EXISTS chunks_namespace_idx
     ON chunks (namespace);
+CREATE INDEX IF NOT EXISTS courses_user_created_idx
+    ON courses (user_id, created_at DESC);

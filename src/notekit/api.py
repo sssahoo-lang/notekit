@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import tempfile
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -17,11 +18,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import calibration, db, llm, retrieval, style, upload
+from . import calibration, courses, db, explain, llm, retrieval, style, upload
+from .identity import normalize
 from .models import Syllabus
 from .pipeline import arun_course_events, plan_syllabus
 
-app = FastAPI(title="NoteKit", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Existing Docker volumes won't re-run schema.sql; create additive tables here.
+    with db.connect() as conn:
+        courses.ensure_table(conn)
+        conn.commit()
+    yield
+
+
+app = FastAPI(title="NoteKit", version="0.1.0", lifespan=lifespan)
 
 # The Next.js dev server runs on 3000. Deployment will need the real origin
 # added here rather than a wildcard.
@@ -37,9 +49,23 @@ class CourseRequest(BaseModel):
     goal: str
     namespace: str | None = None
     user: str | None = None
+    use_style: bool = False
     limit: int = 10
     skip_ingest: bool = False
     with_quiz: bool = False
+
+
+class ProgressRequest(BaseModel):
+    modules_read: list[int] = []
+    bookmark: dict | None = None
+
+
+class ExplainRequest(BaseModel):
+    course_id: int
+    module_index: int
+    highlighted: str
+    question: str | None = None
+    user: str | None = None
 
 
 class StyleLearnRequest(BaseModel):
@@ -62,6 +88,79 @@ async def _sse(events: AsyncIterator[dict]) -> AsyncIterator[str]:
             yield f"data: {json.dumps(event, default=str)}\n\n"
     except Exception as exc:  # noqa: BLE001
         yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
+
+
+async def _course_events_saving(request: CourseRequest) -> AsyncIterator[dict]:
+    """Stream generation, then persist the finished course under the user id."""
+    user_id = (request.user or "").strip()
+    profile = (
+        style.load(normalize(user_id)) if user_id and request.use_style else None
+    )
+
+    llm.reset_usage()
+
+    summary = ""
+    namespace = request.namespace or ""
+    module_titles: list[str] = []
+    modules: dict[int, dict] = {}
+
+    async for event in arun_course_events(
+        request.goal,
+        limit=request.limit,
+        skip_ingest=request.skip_ingest,
+        with_quiz=request.with_quiz,
+        namespace=request.namespace,
+        style=profile,
+    ):
+        etype = event.get("type")
+        if etype == "syllabus":
+            summary = event.get("summary") or ""
+            namespace = event.get("namespace") or namespace
+            module_titles = list(event.get("modules") or [])
+        elif etype == "module":
+            index = int(event["index"])
+            notes = event["notes"]
+            title = notes.get("module_title") or (
+                module_titles[index] if index < len(module_titles) else f"Module {index + 1}"
+            )
+            modules[index] = {
+                "index": index,
+                "title": title,
+                "notes": notes,
+                "error": None,
+            }
+        elif etype == "module_error":
+            index = int(event["index"])
+            title = (
+                module_titles[index]
+                if index < len(module_titles)
+                else f"Module {index + 1}"
+            )
+            modules[index] = {
+                "index": index,
+                "title": title,
+                "notes": None,
+                "error": event.get("error"),
+            }
+
+        yield event
+
+        if etype == "done":
+            ordered = [modules[i] for i in sorted(modules)]
+            # Always persist — even refused modules — so history is complete and
+            # the user is not billed again to rediscover the refusal.
+            course_id = courses.save(
+                user_id=user_id or "anonymous",
+                goal=request.goal,
+                summary=summary,
+                namespace=namespace,
+                module_titles=module_titles,
+                modules=ordered,
+                estimated_cost_usd=event.get("estimated_cost_usd"),
+                with_quiz=request.with_quiz,
+                used_style=bool(profile),
+            )
+            yield {"type": "saved", "id": course_id}
 
 
 @app.get("/api/health")
@@ -94,22 +193,78 @@ def namespaces() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+@app.get("/api/courses")
+def list_courses(user: str = "anonymous") -> list[dict]:
+    """Saved courses for a user, most recently opened first."""
+    return courses.list_for_user(normalize(user))
+
+
+@app.get("/api/courses/{course_id}")
+def get_course(course_id: int) -> dict:
+    row = courses.get(course_id)
+    if not row:
+        raise HTTPException(404, f"course {course_id} not found")
+    # Reopening counts as activity, so "continue studying" tracks what you are
+    # actually reading rather than what you generated most recently.
+    courses.touch(course_id)
+    return row
+
+
+@app.patch("/api/courses/{course_id}/progress")
+def set_progress(course_id: int, request: ProgressRequest) -> dict:
+    """Record which modules have been read and where the bookmark sits."""
+    updated = courses.set_progress(
+        course_id,
+        {"modules_read": sorted(set(request.modules_read)), "bookmark": request.bookmark},
+    )
+    if not updated:
+        raise HTTPException(404, f"course {course_id} not found")
+    return updated
+
+
+@app.post("/api/explain")
+def explain_selection(request: ExplainRequest) -> dict:
+    """Explain a highlighted span using that module's own source passages."""
+    course = courses.get(request.course_id)
+    if not course:
+        raise HTTPException(404, f"course {request.course_id} not found")
+
+    passages, found = explain.passages_for_module(course, request.module_index)
+    if not found:
+        raise HTTPException(
+            422,
+            "That module has no stored source passages, so there is nothing to "
+            "explain it from.",
+        )
+
+    llm.reset_usage()
+    try:
+        answer = explain.explain(
+            passages=passages,
+            highlighted=request.highlighted,
+            question=request.question,
+            style=style.load(normalize(request.user)) if request.user else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    _, cost = llm.usage_report()
+    return {"answer": answer, "estimated_cost_usd": round(cost, 4)}
+
+
+@app.delete("/api/courses/{course_id}")
+def delete_course(course_id: int, user: str | None = None) -> dict:
+    ok = courses.delete(course_id, user_id=user)
+    if not ok:
+        raise HTTPException(404, f"course {course_id} not found")
+    return {"deleted": course_id}
+
+
 @app.post("/api/course")
 def course(request: CourseRequest) -> StreamingResponse:
-    """Stream a course as its modules complete."""
-    profile = style.load(request.user) if request.user else None
-    llm.reset_usage()
-
-    events = arun_course_events(
-        request.goal,
-        limit=request.limit,
-        skip_ingest=request.skip_ingest,
-        with_quiz=request.with_quiz,
-        namespace=request.namespace,
-        style=profile,
-    )
+    """Stream a course as its modules complete; persist when finished."""
     return StreamingResponse(
-        _sse(events),
+        _sse(_course_events_saving(request)),
         media_type="text/event-stream",
         # Without this, a proxy may buffer the whole stream and defeat the point.
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -160,7 +315,7 @@ async def upload_files(
 
 @app.get("/api/style/{user}")
 def get_style(user: str) -> dict:
-    profile = style.load(user)
+    profile = style.load(normalize(user))
     if not profile:
         raise HTTPException(404, f"no style profile for {user}")
     return profile.model_dump()
@@ -173,7 +328,7 @@ def learn_style(request: StyleLearnRequest) -> dict:
         profile = style.learn(request.sample)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    style.save(request.user, profile, len(request.sample))
+    style.save(normalize(request.user), profile, len(request.sample))
     return profile.model_dump()
 
 

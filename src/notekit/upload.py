@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import config, db, embedding
+from .identity import ANONYMOUS, normalize
 from .parsing import PyMuPDFParser, chunk as split
 
 SUPPORTED = {".pdf", ".txt", ".md", ".markdown"}
@@ -26,9 +27,9 @@ def user_namespace(user_id: str, topic: str = "notes") -> str:
     """Namespace uploads per user so one person's files cannot leak into
     another's course. There is no auth yet, so `user_id` is taken on trust —
     this is isolation, not access control, and the README says so."""
-    safe_user = "".join(c for c in user_id if c.isalnum() or c in "-_").lower()
-    safe_topic = "".join(c for c in topic if c.isalnum() or c in "-_").lower()
-    if not safe_user:
+    safe_user = normalize(user_id)
+    safe_topic = normalize(topic)
+    if safe_user == ANONYMOUS and not (user_id or "").strip():
         raise ValueError("user_id must contain at least one alphanumeric character")
     return f"user-{safe_user}-{safe_topic}"
 
