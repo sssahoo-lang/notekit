@@ -27,6 +27,12 @@ notekit = "notekit.cli:app"
 
 [tool.uv]
 package = true
+# uv clones installed files from its cache, and on macOS the clone inherits
+# UF_HIDDEN from the cache entry. Python 3.11+ silently skips hidden .pth
+# files, so the editable install's path file was present, valid, and ignored —
+# surfacing as ModuleNotFoundError from a venv that had worked minutes earlier.
+# Copying instead of cloning does not carry the flag.
+link-mode = "copy"
 
 [build-system]
 requires = ["hatchling"]

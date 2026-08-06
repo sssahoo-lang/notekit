@@ -16,6 +16,19 @@ echo "NoteKit environment"
 check "virtualenv"
 [ -d .venv ] && ok || bad "run: uv sync"
 
+# The actual cause of the recurring ModuleNotFoundError: macOS sets UF_HIDDEN
+# on the editable-install .pth (uv restores it from cache with the flag), and
+# Python 3.11+ silently skips hidden .pth files. The file is present, valid and
+# ignored, which is why it looked like corruption. One chflags fixes it; a venv
+# rebuild also "worked" only because it wrote a fresh unflagged file.
+check "pth not hidden"
+PTH=.venv/lib/python3.11/site-packages/_editable_impl_notekit.pth
+if [ -f "$PTH" ] && ls -lO "$PTH" 2>/dev/null | grep -q hidden; then
+  chflags nohidden "$PTH" 2>/dev/null && echo "unhidden" || bad "could not clear the hidden flag"
+else
+  ok
+fi
+
 check "notekit importable"
 if PYTHONPATH=src .venv/bin/python -c "import notekit" 2>/dev/null; then
   ok
