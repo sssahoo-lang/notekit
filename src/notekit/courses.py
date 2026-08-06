@@ -42,6 +42,12 @@ def ensure_table(conn) -> None:
     conn.execute(
         "ALTER TABLE courses ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ"
     )
+    # A clean title for the library, and the length of the whole course, so a
+    # card can say how long it is without the client parsing every section.
+    conn.execute("ALTER TABLE courses ADD COLUMN IF NOT EXISTS title TEXT")
+    conn.execute(
+        "ALTER TABLE courses ADD COLUMN IF NOT EXISTS word_count INT NOT NULL DEFAULT 0"
+    )
     conn.execute(
         """
         ALTER TABLE courses
@@ -60,11 +66,21 @@ def ensure_table(conn) -> None:
     )
 
 
+def word_count_of(modules: list[dict[str, Any]]) -> int:
+    """Words across every written section — the basis for a reading estimate."""
+    total = 0
+    for module in modules:
+        body = ((module.get("notes") or {}).get("body")) or ""
+        total += len(body.split())
+    return total
+
+
 def save(
     *,
     user_id: str,
     goal: str,
     summary: str,
+    title: str = "",
     namespace: str,
     module_titles: list[str],
     modules: list[dict[str, Any]],
@@ -117,6 +133,7 @@ def update(
     estimated_cost_usd: float | None = None,
     generation_status: str | None = None,
     syllabus: dict[str, Any] | None = None,
+    title: str | None = None,
 ) -> bool:
     """Patch a course in place as modules finish (or after a disconnect)."""
     fields: list[str] = []
@@ -133,6 +150,11 @@ def update(
     if modules is not None:
         fields.append("modules = %s::jsonb")
         values.append(json.dumps(modules, default=str))
+        fields.append("word_count = %s")
+        values.append(word_count_of(modules))
+    if title is not None:
+        fields.append("title = %s")
+        values.append(title)
     if estimated_cost_usd is not None:
         fields.append("estimated_cost_usd = %s")
         values.append(estimated_cost_usd)
@@ -164,9 +186,9 @@ def list_for_user(user_id: str, *, limit: int = 50) -> list[dict]:
         ensure_table(conn)
         rows = conn.execute(
             """
-            SELECT id, user_id, goal, summary, namespace, module_titles,
+            SELECT id, user_id, goal, summary, title, namespace, module_titles,
                    estimated_cost_usd, with_quiz, used_style, created_at,
-                   progress, opened_at, generation_status,
+                   progress, opened_at, word_count, generation_status,
                    jsonb_array_length(COALESCE(module_titles, '[]'::jsonb))
                      AS planned_count,
                    jsonb_array_length(modules) AS module_count,
@@ -216,9 +238,9 @@ def get(course_id: int) -> dict | None:
         ensure_table(conn)
         row = conn.execute(
             """
-            SELECT id, user_id, goal, summary, namespace, module_titles,
+            SELECT id, user_id, goal, summary, title, namespace, module_titles,
                    modules, estimated_cost_usd, with_quiz, used_style,
-                   created_at, progress, opened_at, generation_status, syllabus
+                   created_at, progress, opened_at, word_count, generation_status, syllabus
             FROM courses
             WHERE id = %s
             """,
@@ -301,6 +323,8 @@ def _summary_row(row: dict) -> dict:
         "user_id": row["user_id"],
         "goal": row["goal"],
         "summary": row["summary"],
+        "title": row.get("title") or row["goal"],
+        "word_count": row.get("word_count") or 0,
         "namespace": row["namespace"],
         "module_titles": titles,
         "module_count": row["module_count"],
@@ -332,6 +356,8 @@ def _full_row(row: dict) -> dict:
         "user_id": row["user_id"],
         "goal": row["goal"],
         "summary": row["summary"],
+        "title": row.get("title") or row["goal"],
+        "word_count": row.get("word_count") or 0,
         "namespace": row["namespace"],
         "module_titles": titles,
         "modules": modules,

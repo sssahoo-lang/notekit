@@ -28,6 +28,10 @@ export type SavedCourseSummary = {
   user_id: string;
   goal: string;
   summary: string;
+  /** Clean library label from the planner; falls back to the typed goal. */
+  title: string;
+  /** Words across all written sections, for a reading estimate. */
+  word_count: number;
   namespace: string;
   module_titles: string[];
   module_count: number;

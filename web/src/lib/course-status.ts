@@ -73,3 +73,17 @@ export function pickContinueCourse(
   }
   return null;
 }
+
+/** What to call a course in the UI: the planner's title, else what was typed. */
+export function courseLabel(course: {
+  title?: string;
+  goal: string;
+}): string {
+  return course.title?.trim() || course.goal;
+}
+
+/** Reading estimate at 200 words per minute, or null when nothing is written. */
+export function readingMinutes(wordCount?: number): number | null {
+  if (!wordCount) return null;
+  return Math.max(1, Math.round(wordCount / 200));
+}

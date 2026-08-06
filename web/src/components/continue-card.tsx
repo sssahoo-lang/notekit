@@ -1,6 +1,7 @@
 "use client";
 
 import { ProgressBar } from "@/components/progress-bar";
+import { courseLabel, readingMinutes } from "@/lib/course-status";
 import { Button } from "@/components/ui/button";
 import {
   generationStatus,
@@ -50,7 +51,8 @@ export function ContinueCard({
   } else if (partial) {
     meta = `${course.usable_count ?? 0} of ${total} sections ready · generation paused`;
   } else if (started) {
-    meta = `${read} of ${total} sections read · last opened ${relativeWhen(course.opened_at || course.created_at)}`;
+    const mins = readingMinutes(course.word_count);
+    meta = `${read} of ${total} sections read${mins ? ` · ${mins} min read` : ""} · last opened ${relativeWhen(course.opened_at || course.created_at)}`;
   } else {
     meta = `${total} section${total === 1 ? "" : "s"} ready to read`;
   }
@@ -68,7 +70,7 @@ export function ContinueCard({
       </h2>
 
       <p className="mt-2 text-xl leading-snug font-medium text-ink">
-        {course.goal}
+        {courseLabel(course)}
       </p>
 
       <p className="mt-1.5 text-sm text-muted-foreground">{meta}</p>

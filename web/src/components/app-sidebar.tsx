@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getHealth, listCourses } from "@/lib/api";
+import { courseLabel } from "@/lib/course-status";
 import { useCourseNav } from "@/lib/course-nav";
 import { getProfile, setDisplayName, type Profile } from "@/lib/profile";
 import type { SavedCourseSummary } from "@/lib/types";
@@ -134,7 +135,7 @@ export function AppSidebar() {
                     )}
                   >
                     <span className="line-clamp-2 text-sm leading-snug text-foreground/85">
-                      {course.summary?.trim() || course.goal}
+                      {courseLabel(course)}
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {done

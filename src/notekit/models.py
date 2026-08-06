@@ -18,6 +18,13 @@ class Module(BaseModel):
 class Syllabus(BaseModel):
     """Structured output of the planner call."""
 
+    title: str = Field(
+        description=(
+            "A short title for the course, three to six words, in sentence "
+            "case. This is what the learner sees in their library, so it must "
+            "read cleanly on its own — do not echo their phrasing or typos."
+        )
+    )
     topic_slug: str = Field(
         description=(
             "Canonical lowercase kebab-case slug for the overall subject, e.g. "

@@ -183,6 +183,8 @@ async def _run_job(
     llm.reset_usage()
 
     summary = ""
+    # Distinct from the per-module `title` used inside the loop below.
+    course_title = ""
     ns = namespace or ""
     module_titles: list[str] = []
     modules: dict[int, dict] = dict(existing_modules or {})
@@ -197,6 +199,7 @@ async def _run_job(
         courses.update(
             job.course_id,
             summary=summary or None,
+            title=course_title or None,
             namespace=ns or None,
             module_titles=module_titles or None,
             modules=_ordered(),
@@ -220,6 +223,7 @@ async def _run_job(
             etype = event.get("type")
             if etype == "syllabus":
                 summary = event.get("summary") or ""
+                course_title = event.get("title") or course_title
                 ns = event.get("namespace") or ns
                 module_titles = list(event.get("modules") or [])
                 syllabus_data = event.get("syllabus") or syllabus_data

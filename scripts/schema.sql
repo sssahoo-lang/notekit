@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS courses (
     -- Which modules have been read, and where the reader left off.
     progress            JSONB NOT NULL DEFAULT '{}',
     opened_at           TIMESTAMPTZ,
+    -- Clean library label, and course length for a reading estimate.
+    title               TEXT,
+    word_count          INT NOT NULL DEFAULT 0,
     -- generating | complete | partial — so History can show in-flight courses.
     generation_status   TEXT NOT NULL DEFAULT 'complete',
     -- Planner output kept so a partial course can resume without re-planning.

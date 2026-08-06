@@ -368,6 +368,7 @@ async def arun_course_events(
 
     yield {
         "type": "syllabus",
+        "title": syllabus.title,
         "summary": syllabus.summary,
         "namespace": namespace,
         "modules": [m.title for m in syllabus.modules],

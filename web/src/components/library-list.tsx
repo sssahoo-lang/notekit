@@ -8,6 +8,7 @@ import {
   relativeWhen,
   type LibraryBadge,
 } from "@/lib/course-status";
+import { courseLabel, readingMinutes } from "@/lib/course-status";
 import type { SavedCourseSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +65,9 @@ export function LibraryList({
           const planned = plannedCount(course);
           const ready = course.usable_count ?? 0;
 
+          const mins = readingMinutes(course.word_count);
           let detail = relativeWhen(course.opened_at || course.created_at);
+          if (mins) detail = `${mins} min read · ${detail}`;
           if (badge === "generating") {
             detail = `${ready} of ${planned || "…"} ready · ${detail}`;
           } else if (badge === "partial") {
@@ -97,7 +100,7 @@ export function LibraryList({
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusChip badge={badge} />
                     <p className="leading-snug font-medium text-ink">
-                      {course.goal}
+                      {courseLabel(course)}
                     </p>
                   </div>
                   <p className="mt-1.5 text-sm text-muted-foreground">
@@ -110,7 +113,7 @@ export function LibraryList({
                   type="button"
                   size="sm"
                   variant="ghost"
-                  aria-label={`Delete course: ${course.goal}`}
+                  aria-label={`Delete course: ${courseLabel(course)}`}
                   className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-destructive"
                   onClick={() => onDelete(course.id)}
                 >
