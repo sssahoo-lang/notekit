@@ -21,6 +21,10 @@ type Props = {
   userId?: string;
   expanded?: boolean;
   onToggle?: () => void;
+  /** Reader-wide preference; sources stay listed either way. */
+  showCitations?: boolean;
+  /** Opens the next section and scrolls to it, when there is one. */
+  onAdvance?: () => void;
 };
 
 /** Rough reading time. 200 wpm is the usual estimate for considered reading. */
@@ -38,6 +42,8 @@ export function ModulePanel({
   userId,
   expanded = true,
   onToggle,
+  showCitations = true,
+  onAdvance,
 }: Props) {
   const [activeCite, setActiveCite] = useState<number | null>(null);
   const [quizOpen, setQuizOpen] = useState(false);
@@ -49,6 +55,10 @@ export function ModulePanel({
     [chunks],
   );
   const chunkList = chunks ?? [];
+  const numbering = useMemo(
+    () => new Map(chunkList.map((c, i) => [c.id, i + 1])),
+    [chunkList],
+  );
   const activeChunk = activeCite != null ? chunkMap.get(activeCite) : null;
 
   const body =
@@ -149,6 +159,8 @@ export function ModulePanel({
             text={body}
             activeId={activeCite}
             onCite={setActiveCite}
+            numbering={numbering}
+            hidden={!showCitations}
             className="measure font-notes text-[1.08rem] leading-[1.75] text-ink"
           />
         </div>
@@ -185,11 +197,31 @@ export function ModulePanel({
         <p className="text-sm text-muted-foreground">Waiting to write…</p>
       ) : null}
 
-      {canMarkRead ? (
-        <div className="mt-6">
-          <Button type="button" variant="secondary" size="sm" onClick={onMarkRead}>
-            Mark as read
-          </Button>
+      {module.status === "done" || module.status === "refused" ? (
+        <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-border/60 pt-5">
+          {onAdvance ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                if (!read) onMarkRead?.();
+                onAdvance();
+              }}
+            >
+              {read ? "Next section" : "Mark read & continue"} →
+            </Button>
+          ) : null}
+          {canMarkRead ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onMarkRead}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {onAdvance ? "Just mark as read" : "Mark as read"}
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -245,7 +277,7 @@ export function ModulePanel({
                 >
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="font-mono">
-                      c{chunk.id}
+                      {numbering.get(chunk.id) ?? chunk.id}
                     </Badge>
                     <span className="text-sm font-medium">
                       {chunk.document_title}
@@ -265,7 +297,7 @@ export function ModulePanel({
         <aside className="mt-4 rounded-xl border border-cite/30 bg-cite/8 px-4 py-3">
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <Badge className="bg-cite text-cite-foreground hover:bg-cite">
-              c{activeChunk.id}
+              Source {numbering.get(activeChunk.id) ?? activeChunk.id}
             </Badge>
             {activeChunk.document_url ? (
               <a

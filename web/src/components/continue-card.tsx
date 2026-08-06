@@ -75,7 +75,9 @@ export function ContinueCard({
 
       {nextSection && !generating ? (
         <p className="mt-3 text-sm text-foreground/80">
-          <span className="text-muted-foreground">Next up: </span>
+          <span className="text-muted-foreground">
+            {started ? "Next up: " : "Start with: "}
+          </span>
           {nextSection}
         </p>
       ) : null}

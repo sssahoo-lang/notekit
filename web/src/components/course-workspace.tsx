@@ -708,6 +708,18 @@ function CourseReader({
   onBookmark: (index: number) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [showCitations, setShowCitations] = useState(true);
+
+  useEffect(() => {
+    setShowCitations(localStorage.getItem("notekit.citations") !== "off");
+  }, []);
+
+  function toggleCitations() {
+    setShowCitations((prev) => {
+      localStorage.setItem("notekit.citations", prev ? "off" : "on");
+      return !prev;
+    });
+  }
 
   // Open where the reader left off, and nothing else. Re-runs when the course
   // changes so opening a different one does not inherit the last one's state.
@@ -802,7 +814,17 @@ function CourseReader({
 
         <div className="min-w-0">
           {modules.length > 1 ? (
-            <div className="mb-4 flex justify-end">
+            <div className="mb-4 flex flex-wrap justify-end gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={toggleCitations}
+                aria-pressed={!showCitations}
+              >
+                {showCitations ? "Hide citations" : "Show citations"}
+              </Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -835,6 +857,27 @@ function CourseReader({
               userId={userId}
               expanded={expanded.has(m.index)}
               onToggle={() => toggleSection(m.index)}
+              showCitations={showCitations}
+              onAdvance={
+                m.index + 1 < modules.length
+                  ? () => {
+                      const next = m.index + 1;
+                      setExpanded((prev) => new Set([...prev, next]));
+                      onSelectSection(next);
+                      onBookmark(next);
+                      requestAnimationFrame(() => {
+                        const el = document.getElementById(`section-${next}`);
+                        const reduced = window.matchMedia(
+                          "(prefers-reduced-motion: reduce)",
+                        ).matches;
+                        el?.scrollIntoView({
+                          behavior: reduced ? "auto" : "smooth",
+                          block: "start",
+                        });
+                      });
+                    }
+                  : undefined
+              }
               onMarkRead={() => onMarkRead(m.index)}
               onVisible={() => {
                 onSelectSection(m.index);
