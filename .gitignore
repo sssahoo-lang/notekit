@@ -16,3 +16,6 @@ build/
 # Cached HF models and downloaded PDFs
 .cache/
 data/pdfs/
+
+# Persisted runtime tunables (calibrated refusal threshold, etc.)
+.notekit/

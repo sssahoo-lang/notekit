@@ -64,9 +64,17 @@ _jobs: dict[int, _CourseJob] = {}
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # Existing Docker volumes won't re-run schema.sql; create additive tables here.
+    from . import config as _config
+
+    _config.load_runtime_settings()
     with db.connect() as conn:
         courses.ensure_table(conn)
         conn.commit()
+    # In-memory generation jobs die with the process; don't leave History saying
+    # "Generating" for courses that can no longer be writing.
+    abandoned = courses.abandon_stale_generating()
+    if abandoned:
+        print(f"Reconciled {abandoned} abandoned generating course(s) → partial")
     yield
     for job in list(_jobs.values()):
         job.cancel.set()
@@ -675,9 +683,13 @@ def learn_style(request: StyleLearnRequest) -> dict:
 
 
 @app.post("/api/calibrate")
-def calibrate(evalset_path: str = Form(...)) -> dict:
+def calibrate(
+    evalset_path: str = Form(...),
+    apply: bool = Form(False),
+) -> dict:
+    """Measure the refusal threshold; pass apply=true to persist it for runtime."""
     try:
         calset = calibration.CalibrationSet.load(evalset_path)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return calibration.calibrate(calset).model_dump()
+    return calibration.calibrate(calset, apply=apply).model_dump()

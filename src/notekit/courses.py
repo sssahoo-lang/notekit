@@ -75,6 +75,76 @@ def word_count_of(modules: list[dict[str, Any]]) -> int:
     return total
 
 
+def slim_notes(notes: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Persist notes without embedding full passage text.
+
+    Chunk bodies already live in `chunks`; courses keep ids and join on read.
+    """
+    if not notes:
+        return notes
+    out = {k: v for k, v in notes.items() if k != "chunks"}
+    chunk_list = notes.get("chunks") or []
+    if chunk_list and not out.get("chunk_ids"):
+        ids: list[int] = []
+        for chunk in chunk_list:
+            if isinstance(chunk, dict) and "id" in chunk:
+                ids.append(int(chunk["id"]))
+            elif hasattr(chunk, "id"):
+                ids.append(int(chunk.id))
+        out["chunk_ids"] = ids
+    return out
+
+
+def slim_modules(modules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{**module, "notes": slim_notes(module.get("notes"))} for module in modules]
+
+
+def hydrate_modules(modules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach chunk rows from Postgres for the UI / explain path.
+
+    Legacy rows that still store full `chunks` in JSONB are left untouched.
+    """
+    needed: list[int] = []
+    for module in modules:
+        notes = module.get("notes") or {}
+        if notes.get("chunks"):
+            continue
+        for key in ("chunk_ids", "cited_chunk_ids"):
+            for cid in notes.get(key) or []:
+                needed.append(int(cid))
+    ordered_ids = list(dict.fromkeys(needed))
+    if not ordered_ids:
+        return modules
+
+    with db.connect() as conn:
+        rows = db.get_chunks_by_ids(conn, ordered_ids)
+    by_id = {int(r["id"]): r for r in rows}
+
+    hydrated: list[dict[str, Any]] = []
+    for module in modules:
+        notes = module.get("notes")
+        if not notes or notes.get("chunks"):
+            hydrated.append(module)
+            continue
+        order = notes.get("chunk_ids") or notes.get("cited_chunk_ids") or []
+        chunks = []
+        for cid in order:
+            row = by_id.get(int(cid))
+            if not row:
+                continue
+            chunks.append(
+                {
+                    "id": int(row["id"]),
+                    "text": row["text"],
+                    "document_title": row["document_title"],
+                    "document_url": row["document_url"],
+                    "score": float(row.get("score") or 0),
+                }
+            )
+        hydrated.append({**module, "notes": {**notes, "chunks": chunks}})
+    return hydrated
+
+
 def save(
     *,
     user_id: str,
@@ -91,17 +161,19 @@ def save(
     syllabus: dict[str, Any] | None = None,
 ) -> int:
     status = _valid_status(generation_status)
+    slimmed = slim_modules(modules)
     with db.connect() as conn:
         ensure_table(conn)
         row = conn.execute(
             """
             INSERT INTO courses (
-                user_id, goal, summary, namespace, module_titles, modules,
+                user_id, goal, summary, title, namespace, module_titles, modules,
                 estimated_cost_usd, with_quiz, used_style, generation_status,
-                syllabus
+                syllabus, word_count
             )
             VALUES (
-                %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s::jsonb
+                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s,
+                %s::jsonb, %s
             )
             RETURNING id
             """,
@@ -109,14 +181,16 @@ def save(
                 normalize(user_id),
                 goal,
                 summary,
+                title or None,
                 namespace,
                 json.dumps(module_titles),
-                json.dumps(modules, default=str),
+                json.dumps(slimmed, default=str),
                 estimated_cost_usd,
                 with_quiz,
                 used_style,
                 status,
                 json.dumps(syllabus) if syllabus is not None else None,
+                word_count_of(slimmed),
             ),
         ).fetchone()
         conn.commit()
@@ -148,10 +222,11 @@ def update(
         fields.append("module_titles = %s::jsonb")
         values.append(json.dumps(module_titles))
     if modules is not None:
+        slimmed = slim_modules(modules)
         fields.append("modules = %s::jsonb")
-        values.append(json.dumps(modules, default=str))
+        values.append(json.dumps(slimmed, default=str))
         fields.append("word_count = %s")
-        values.append(word_count_of(modules))
+        values.append(word_count_of(slimmed))
     if title is not None:
         fields.append("title = %s")
         values.append(title)
@@ -179,6 +254,25 @@ def update(
 
 def set_generation_status(course_id: int, status: str) -> bool:
     return update(course_id, generation_status=status)
+
+
+def abandon_stale_generating() -> int:
+    """Mark in-flight courses as partial after a process restart.
+
+    Generation jobs live in memory. Anything still `generating` when the API
+    starts cannot still be writing — leave History in an honest state.
+    """
+    with db.connect() as conn:
+        ensure_table(conn)
+        cur = conn.execute(
+            """
+            UPDATE courses
+               SET generation_status = 'partial'
+             WHERE generation_status = 'generating'
+            """
+        )
+        conn.commit()
+        return int(cur.rowcount)
 
 
 def list_for_user(user_id: str, *, limit: int = 50) -> list[dict]:
@@ -248,7 +342,7 @@ def get(course_id: int) -> dict | None:
         ).fetchone()
     if not row:
         return None
-    return _full_row(row)
+    return _full_row(row, hydrate=True)
 
 
 def delete(course_id: int, *, user_id: str | None = None) -> bool:
@@ -341,9 +435,11 @@ def _summary_row(row: dict) -> dict:
     }
 
 
-def _full_row(row: dict) -> dict:
+def _full_row(row: dict, *, hydrate: bool = False) -> dict:
     titles = _parse_json(row["module_titles"]) or []
     modules = _parse_json(row["modules"]) or []
+    if hydrate:
+        modules = hydrate_modules(modules)
     usable = sum(
         1
         for m in modules

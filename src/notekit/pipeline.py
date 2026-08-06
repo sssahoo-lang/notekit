@@ -22,48 +22,106 @@ from .style import StyleProfile
 _CITATION = re.compile(r"\[c(\d+)\]")
 _REFUSAL_MARKER = "INSUFFICIENT"
 
-_PLANNER_SYSTEM = """You design short, focused courses of study.
+_PLANNER_SYSTEM = """You design short, focused courses of study that can be \
+taught strictly from retrieved source passages.
 
-Given a learning goal, produce a syllabus of 3-5 modules that build on each \
-other. Each module needs a retrieval query written to match the language of \
-academic source material, not the language of the learner's question.
+Given a learning goal:
 
-The topic_slug must be canonical: expand abbreviations to their full form so \
-that different phrasings of the same subject produce an identical slug."""
+1. Infer the learner level (beginner, intermediate, or advanced) from how they \
+phrased the goal. Encode that level in the module learning goals and in the \
+course summary.
+2. Produce 3–5 modules that build on each other. Prerequisites come first; \
+later modules assume earlier ones.
+3. For each module, write a retrieval `query` in the language of academic \
+source material — named methods, definitions, equations, and field terms. \
+Never write queries as learner requests ("teach me…", "explain…", "help me \
+understand…").
+4. Learning goals must be observable skills (define, derive, compare, apply, \
+diagnose), not vague topics ("know about X").
+5. Choose a clean library `title` (three to six words, sentence case) that does \
+not echo typos or rambling phrasing from the goal.
+6. `topic_slug` must be canonical lowercase kebab-case. Expand abbreviations \
+to their full form so "RL" and "reinforcement learning" share one slug.
+
+The syllabus must be teachable from Wikipedia- and paper-like sources. Prefer \
+concepts that have stable, citable treatments over ephemeral or purely \
+opinionated topics."""
 
 # Shared by the notes and quiz calls. Both must send an identical prefix —
 # system text plus the cached passages block — or the quiz call cannot read the
 # cache the notes call wrote. Task-specific instructions therefore live in the
 # user turn, after the cached block, not here.
-_GROUNDING_SYSTEM = """You work strictly from provided source passages.
+_GROUNDING_SYSTEM = """You work strictly from the provided source passages.
 
 Rules, in order of importance:
 
-1. Every factual claim must be supported by one of the numbered passages. If \
-the passages do not support a claim, do not make it.
-2. Cite the passage each claim came from inline, as [c123], using the exact \
-passage id. Multiple citations per sentence are fine.
-3. If the passages do not cover enough of the module topic, reply with exactly \
+1. Every factual claim must be entailed by one or more numbered passages. If \
+a passage does not support a claim, do not make it — including definitions, \
+examples, analogies, and "as is well known" filler.
+2. Cite the supporting passage inline as [c123] using only ids that appear in \
+the passages block. Cite every factual sentence. Multiple citations per \
+sentence are fine when several passages jointly support it.
+3. Do not use outside knowledge, even when you are sure it is correct. Do not \
+invent equations, numbers, names, or mechanisms that are not in the passages.
+4. Paraphrase the passages in clear study prose. Do not paste long quotations.
+5. If the passages are too thin to teach the module at all, reply with exactly \
 one line: the word INSUFFICIENT, then one sentence naming what is missing. \
-Write nothing else. Refusing cleanly is the correct answer, not a fallback.
-4. Do not use outside knowledge, even where you are confident it is correct.
+Write nothing else. A clean refusal is success, not failure.
+6. Any style guidance in the user turn changes form only (voice, rhythm, \
+register). It never licenses new facts.
 
-The user turn states which task to perform."""
+The user turn states which task to perform and how to handle partial coverage."""
 
 _NOTES_TASK = """Write the study notes for this module.
 
-Address every stated learning goal that the passages support, in order. Where \
-the passages support a goal only partly, cover what they do support and say \
-briefly what is missing. Do not skip a goal in silence.
+Coverage:
+- Address every stated learning goal that the passages support, in order.
+- If a goal is only partly supported, teach what the passages allow and add one \
+short sentence on what is missing. Do not skip a goal in silence.
+- If almost nothing is supported, use the INSUFFICIENT refusal line instead of \
+thin notes.
 
-Write for an intermediate learner: prose with short paragraphs, no headings, \
-no preamble, no closing summary."""
+How to write:
+- Match the level implied by the learning goals (beginner / intermediate / \
+advanced). Prefer dense explanatory prose in short paragraphs.
+- When the passages allow it, move definition → mechanism → a small example \
+drawn from those passages. Never invent an example the passages do not contain.
+- Connect ideas across passages when both sides of the link are supported.
+- Write enough to actually teach each supported goal (typically a few \
+paragraphs per goal), not a skim.
+- No headings, no preamble ("In this module…"), no closing summary essay, no \
+bullet lists unless a passage itself is a list you must render faithfully.
+- Every factual sentence must carry at least one [cID] citation.
 
-_QUIZ_TASK = """Write {n} multiple-choice questions testing this module.
+Diagrams (optional, at most one per module):
+- If the passages describe a clear process, cycle, hierarchy, or comparison, \
+you may insert one fenced Mermaid block using only `flowchart` or \
+`sequenceDiagram` syntax.
+- Every node label and every edge must name entities or relations that appear \
+in the passages. Do not invent steps, actors, or branches.
+- Prefer no diagram over a speculative one.
+- Immediately after the closing fence, write one caption sentence that \
+cites the supporting passages, e.g. "Q-learning update cycle [c12][c44]."
+- Place the diagram after the prose that introduces it, not at the very start.
 
-Each question needs exactly four options and one correct answer, derivable \
-from the passages alone. Wrong options must be plausible but clearly wrong \
-given the passages, never true-but-unmentioned.
+Example shape (replace labels with entities from YOUR passages only):
+
+```mermaid
+flowchart LR
+  A[State] --> B[Action]
+  B --> C[Reward]
+```
+Caption: Q-learning interaction loop [c12]."""
+
+_QUIZ_TASK = """Write {n} multiple-choice questions that test this module.
+
+Question quality:
+- Probe concepts, relationships, or procedures supported by the passages — not \
+trivia, wording recall, or trivia about citation ids.
+- Exactly one correct option, fully determined by the passages.
+- The three wrong options must be plausible but false given the passages. Do \
+not use options that are true in general yet unmentioned; those are unfair.
+- Each WHY must cite the supporting passage(s) as [c123].
 
 Answer in exactly this format, nothing else:
 
@@ -114,7 +172,11 @@ def plan_syllabus(goal: str) -> Syllabus:
     return llm.parse(
         model=config.PLANNER_MODEL,
         system=_PLANNER_SYSTEM,
-        prompt=f"Learning goal: {goal}",
+        prompt=(
+            f"Learning goal: {goal}\n\n"
+            "Match the inferred learner level, write retrieval-ready academic "
+            "queries for each module, and keep learning goals observable."
+        ),
         max_tokens=config.MAX_TOKENS_PLAN,
         schema=Syllabus,
     )
@@ -137,7 +199,7 @@ def _refusal_for(module: Module, chunks: list[Chunk]) -> ModuleNotes | None:
             refused=True,
             refusal_reason="No source passages retrieved for this module.",
         )
-    if chunks[0].score < config.REFUSAL_SCORE_THRESHOLD:
+    if chunks[0].score < config.refusal_score_threshold():
         return ModuleNotes(
             module_title=module.title,
             body="",
@@ -146,7 +208,7 @@ def _refusal_for(module: Module, chunks: list[Chunk]) -> ModuleNotes | None:
             refused=True,
             refusal_reason=(
                 f"Best passage scored {chunks[0].score:.2f}, below the coverage "
-                f"threshold of {config.REFUSAL_SCORE_THRESHOLD}."
+                f"threshold of {config.refusal_score_threshold()}."
             ),
         )
     return None

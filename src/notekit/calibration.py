@@ -40,6 +40,8 @@ class CalibrationReport(BaseModel):
     accuracy: float | None
     current_threshold: float
     current_accuracy: float | None
+    applied: bool = False
+    applied_path: str | None = None
 
     @property
     def separated(self) -> bool:
@@ -61,9 +63,13 @@ def _accuracy(probes: list[Probe], threshold: float) -> float:
 
 
 def calibrate(
-    calset: CalibrationSet, cfg: config.RetrievalConfig | None = None
+    calset: CalibrationSet,
+    cfg: config.RetrievalConfig | None = None,
+    *,
+    apply: bool = False,
 ) -> CalibrationReport:
     cfg = cfg or config.EMBEDDING
+    current = config.refusal_score_threshold()
 
     probes = [
         Probe(query=q, expected_covered=True, top_score=_score(q, calset.namespace, cfg))
@@ -79,7 +85,7 @@ def calibrate(
             probes=probes,
             suggested_threshold=None,
             accuracy=None,
-            current_threshold=config.REFUSAL_SCORE_THRESHOLD,
+            current_threshold=current,
             current_accuracy=None,
         )
 
@@ -90,10 +96,19 @@ def calibrate(
     ] + [scores[-1] + 1.0]
     best = max(candidates, key=lambda t: (_accuracy(probes, t), -abs(t)))
 
+    applied = False
+    applied_path: str | None = None
+    if apply:
+        config.set_refusal_score_threshold(best, persist=True)
+        applied = True
+        applied_path = str(config.REFUSAL_THRESHOLD_PATH)
+
     return CalibrationReport(
         probes=probes,
         suggested_threshold=best,
         accuracy=_accuracy(probes, best),
-        current_threshold=config.REFUSAL_SCORE_THRESHOLD,
-        current_accuracy=_accuracy(probes, config.REFUSAL_SCORE_THRESHOLD),
+        current_threshold=current,
+        current_accuracy=_accuracy(probes, current),
+        applied=applied,
+        applied_path=applied_path,
     )

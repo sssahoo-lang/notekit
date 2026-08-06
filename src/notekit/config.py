@@ -8,8 +8,10 @@ quality for a demo — it roughly triples the per-course cost.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -94,11 +96,74 @@ SWEEP = [
 
 # --- Refusal ----------------------------------------------------------------
 
-# If the best reranked chunk scores below this, the module is reported as
-# uncovered rather than written. This number is a placeholder: it cannot be
-# chosen sensibly until milestone 2 measures real scores against deliberately
-# out-of-corpus questions. Treat it as unvalidated.
-REFUSAL_SCORE_THRESHOLD = -2.0
+# Default until `notekit calibrate --apply` (or the API) writes a measured value.
+DEFAULT_REFUSAL_SCORE_THRESHOLD = -2.0
+
+# Where a calibrated threshold is persisted so runtime matches eval.
+REFUSAL_THRESHOLD_PATH = Path(
+    os.environ.get(
+        "NOTEKIT_REFUSAL_PATH",
+        str(Path(__file__).resolve().parents[2] / ".notekit" / "refusal_threshold.json"),
+    )
+)
+
+_refusal_override: float | None = None
+
+
+def refusal_score_threshold() -> float:
+    """Active refusal cutoff — calibrated file, else default."""
+    if _refusal_override is not None:
+        return _refusal_override
+    return DEFAULT_REFUSAL_SCORE_THRESHOLD
+
+
+# Back-compat for call sites that still read the constant name.
+# Prefer refusal_score_threshold() in new code.
+REFUSAL_SCORE_THRESHOLD = DEFAULT_REFUSAL_SCORE_THRESHOLD
+
+
+def load_runtime_settings() -> None:
+    """Load persisted tunables (refusal threshold) into process memory."""
+    global _refusal_override, REFUSAL_SCORE_THRESHOLD
+    path = REFUSAL_THRESHOLD_PATH
+    if not path.is_file():
+        _refusal_override = None
+        REFUSAL_SCORE_THRESHOLD = DEFAULT_REFUSAL_SCORE_THRESHOLD
+        return
+    try:
+        data = json.loads(path.read_text())
+        value = float(data["threshold"])
+    except (OSError, KeyError, TypeError, ValueError):
+        _refusal_override = None
+        REFUSAL_SCORE_THRESHOLD = DEFAULT_REFUSAL_SCORE_THRESHOLD
+        return
+    _refusal_override = value
+    REFUSAL_SCORE_THRESHOLD = value
+
+
+def set_refusal_score_threshold(value: float, *, persist: bool = True) -> float:
+    """Set the live refusal threshold; optionally write it for next process."""
+    global _refusal_override, REFUSAL_SCORE_THRESHOLD
+    _refusal_override = float(value)
+    REFUSAL_SCORE_THRESHOLD = _refusal_override
+    if persist:
+        path = REFUSAL_THRESHOLD_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "threshold": _refusal_override,
+                    "source": "calibration",
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+    return _refusal_override
+
+
+# Load once on import so CLI and API share the same file without an extra call.
+load_runtime_settings()
 
 # --- Infrastructure ---------------------------------------------------------
 
@@ -112,3 +177,6 @@ MAX_PARALLEL_MODULES = 4
 # merges the results. This caps the merged set: more context raises coverage but
 # costs input tokens and dilutes the reranked ordering.
 MAX_CONTEXT_CHUNKS = 14
+
+# Chunks shorter than this (embedding tokenizer tokens) are dropped as noise.
+MIN_CHUNK_TOKENS = 40

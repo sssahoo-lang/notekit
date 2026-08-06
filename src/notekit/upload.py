@@ -8,6 +8,7 @@ a namespace no other user's course can retrieve from.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from . import config, db, embedding
@@ -32,6 +33,11 @@ def user_namespace(user_id: str, topic: str = "notes") -> str:
     if safe_user == ANONYMOUS and not (user_id or "").strip():
         raise ValueError("user_id must contain at least one alphanumeric character")
     return f"user-{safe_user}-{safe_topic}"
+
+
+def content_hash(data: bytes) -> str:
+    """Stable id for file bytes — survives temp-path uploads and renames."""
+    return hashlib.sha256(data).hexdigest()
 
 
 def extract(path: Path) -> str:
@@ -82,36 +88,62 @@ def ingest_files(
     namespace: str,
     cfg: config.RetrievalConfig | None = None,
 ) -> dict:
-    """Parse, chunk, embed and store local files. Returns a summary dict."""
+    """Parse, chunk, embed and store local files. Returns a summary dict.
+
+    Documents are keyed by content hash, not filesystem path, so the same PDF
+    uploaded twice through the API temp directory is recognised as one document.
+    """
     cfg = cfg or config.EMBEDDING
     files = collect(paths)
     if not files:
-        return {"files": 0, "skipped": [], "new_documents": 0, "new_chunks": 0}
+        return {
+            "files": 0,
+            "skipped": [],
+            "new_documents": 0,
+            "updated_documents": 0,
+            "new_chunks": 0,
+        }
 
     skipped: list[str] = []
     new_documents = 0
+    updated_documents = 0
     total_chunks = 0
+    # Identical content seen twice in one batch (common with temp copies).
+    seen_hashes: set[str] = set()
 
     with db.connect() as conn:
         for path in files:
             try:
+                raw = path.read_bytes()
+                digest = content_hash(raw)
                 text = extract(path)
             except UnsupportedFile as exc:
                 # One bad file must not abort an upload of fifty.
                 skipped.append(str(exc))
                 continue
 
-            document_id = db.upsert_document(
+            if digest in seen_hashes:
+                skipped.append(f"{path.name}: duplicate of another file in this upload")
+                continue
+            seen_hashes.add(digest)
+
+            document_id, created = db.upsert_or_replace_document(
                 conn,
                 namespace=namespace,
                 source="upload",
-                # Resolved path, so re-uploading the same file updates rather
-                # than duplicating it.
-                external_id=str(path.resolve()),
+                external_id=digest,
                 title=path.stem,
-                url=f"file://{path.resolve()}",
+                url=f"file://{path.name}",
             )
-            if document_id is None:
+
+            existing_chunks = conn.execute(
+                "SELECT count(*) AS n FROM chunks WHERE document_id = %s",
+                (document_id,),
+            ).fetchone()["n"]
+
+            if not created and int(existing_chunks) > 0:
+                # Same content hash already indexed — keep existing chunks.
+                # (Hash is of file bytes, so content cannot have changed.)
                 skipped.append(f"{path.name}: already indexed in this namespace")
                 continue
 
@@ -120,25 +152,39 @@ def ingest_files(
                 skipped.append(f"{path.name}: no chunks survived splitting")
                 continue
 
-            db.insert_chunks(
-                conn,
-                document_id=document_id,
-                namespace=namespace,
-                texts=texts,
-                embeddings=embedding.embed_documents(texts, cfg),
-            )
-            new_documents += 1
+            vectors = embedding.embed_documents(texts, cfg)
+            if created:
+                db.insert_chunks(
+                    conn,
+                    document_id=document_id,
+                    namespace=namespace,
+                    texts=texts,
+                    embeddings=vectors,
+                )
+                new_documents += 1
+            else:
+                # Row existed but had no chunks (interrupted prior upload).
+                db.replace_chunks(
+                    conn,
+                    document_id=document_id,
+                    namespace=namespace,
+                    texts=texts,
+                    embeddings=vectors,
+                )
+                updated_documents += 1
             total_chunks += len(texts)
             print(f"  + {path.name} ({len(texts)} chunks)")
 
-        db.mark_topic_ingested(conn, namespace, namespace, "user upload")
-        conn.commit()
         stats = db.namespace_stats(conn, namespace)
+        if int(stats["chunks"] or 0) > 0:
+            db.mark_topic_ingested(conn, namespace, namespace, "user upload")
+        conn.commit()
 
     return {
         "files": len(files),
         "skipped": skipped,
         "new_documents": new_documents,
+        "updated_documents": updated_documents,
         "new_chunks": total_chunks,
         **stats,
     }

@@ -6,12 +6,27 @@ from pydantic import BaseModel, Field
 
 
 class Module(BaseModel):
-    title: str = Field(description="Short module title")
+    title: str = Field(
+        description=(
+            "Short module title, three to eight words, sentence case. Name the "
+            "concept, not the pedagogy (prefer 'Temporal-difference updates' "
+            "over 'Understanding how updates work')."
+        )
+    )
     query: str = Field(
-        description="A focused retrieval query for this module's source material"
+        description=(
+            "Retrieval query written like an academic search string: field "
+            "terms, definitions, and named methods. Never phrase it as a "
+            "learner request ('teach me…', 'explain…'). Example: "
+            "'Q-learning Bellman optimality equation action-value function'."
+        )
     )
     learning_goals: list[str] = Field(
-        description="Two to four things the reader should be able to do after this module"
+        description=(
+            "Two to four observable outcomes after this module, matching the "
+            "inferred learner level. Prefer verbs like define, derive, compare, "
+            "apply, diagnose — not vague topics like 'know about X'."
+        )
     )
 
 
@@ -33,8 +48,15 @@ class Syllabus(BaseModel):
             "so that 'RL' and 'reinforcement learning' produce the same slug."
         )
     )
-    summary: str = Field(description="One sentence describing the course")
-    modules: list[Module]
+    summary: str = Field(
+        description=(
+            "One sentence describing what the course teaches and at what level, "
+            "without marketing language."
+        )
+    )
+    modules: list[Module] = Field(
+        description="Three to five modules in pedagogical order, prerequisites first"
+    )
 
 
 class Chunk(BaseModel):

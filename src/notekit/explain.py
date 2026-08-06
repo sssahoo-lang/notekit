@@ -16,18 +16,20 @@ from .style import StyleProfile
 
 _SYSTEM = """You explain a passage of study notes to the reader who wrote them.
 
-You are given the source passages the notes were written from, the sentence or \
-paragraph the reader highlighted, and optionally their question.
+You are given the source passages those notes were written from, the sentence \
+or paragraph the reader highlighted, and optionally their question.
 
 Rules:
 
-1. Explain only what the source passages support. If they do not answer the \
-reader's question, say plainly which part is not covered rather than filling \
-the gap from your own knowledge.
-2. Cite the passages you rely on inline as [c123], using the exact ids given.
-3. Be direct and short — a few sentences. The reader is stuck on one specific \
-thing, not asking for the module again.
-4. Do not repeat the highlighted text back to them before answering."""
+1. Answer only from the source passages. If they do not cover what the reader \
+asks, say plainly which part is missing — never fill the gap from your own \
+knowledge.
+2. Cite every supporting passage inline as [c123], using only the ids given.
+3. Be direct and short: a few sentences. Untangle the hard idea; do not \
+re-teach the whole module.
+4. Do not quote the highlighted text back before answering.
+5. If style guidance appears in the user turn, it changes phrasing only — it \
+does not license new facts."""
 
 
 def explain(
@@ -65,6 +67,9 @@ def passages_for_module(course: dict, module_index: int) -> tuple[str, bool]:
 
     Returns the block and whether any passages were found — a refused module has
     retrieved chunks but no notes, and is still worth explaining from.
+
+    Prefer hydrated `notes.chunks`; fall back to loading ids from Postgres when
+    a course was stored in the slim form (ids only).
     """
     modules = course.get("modules") or []
     match = next(
@@ -73,7 +78,15 @@ def passages_for_module(course: dict, module_index: int) -> tuple[str, bool]:
     if not match:
         return "", False
 
-    chunks = ((match.get("notes") or {}).get("chunks")) or []
+    notes = match.get("notes") or {}
+    chunks = list(notes.get("chunks") or [])
+    if not chunks:
+        ids = list(notes.get("chunk_ids") or notes.get("cited_chunk_ids") or [])
+        if ids:
+            from . import db
+
+            with db.connect() as conn:
+                chunks = db.get_chunks_by_ids(conn, [int(i) for i in ids])
     if not chunks:
         return "", False
 

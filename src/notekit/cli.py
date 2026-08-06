@@ -266,12 +266,20 @@ def plan_cmd(
 @app.command("calibrate")
 def calibrate_cmd(
     evalset: str = typer.Argument(..., help="Path to a calibration set JSON"),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Persist the suggested threshold so generation uses it",
+    ),
 ) -> None:
     """Find the refusal threshold that best separates covered from uncovered.
 
-    Needs no API key — retrieval and reranking are local.
+    Needs no API key — retrieval and reranking are local. Pass --apply to write
+    the suggested value for the API and future CLI runs.
     """
-    report = calibration.calibrate(calibration.CalibrationSet.load(evalset))
+    report = calibration.calibrate(
+        calibration.CalibrationSet.load(evalset), apply=apply
+    )
 
     table = Table(title="Refusal calibration", title_style="dim")
     for column in ("query", "expected", "top score"):
@@ -296,6 +304,11 @@ def calibrate_cmd(
         f"suggested threshold {report.suggested_threshold:+.2f} "
         f"→ accuracy {report.accuracy:.0%}"
     )
+    if report.applied:
+        console.print(
+            f"[green]Applied[/] → {report.applied_path} "
+            f"(live threshold {config.refusal_score_threshold():+.2f})"
+        )
     if report.separated:
         console.print("[green]Covered and uncovered questions separate cleanly.[/]")
     else:

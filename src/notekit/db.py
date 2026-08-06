@@ -26,6 +26,14 @@ def topic_is_ingested(conn: psycopg.Connection, slug: str) -> bool:
     return bool(row and row["ingested_at"])
 
 
+def clear_topic_cache(conn: psycopg.Connection, slug: str) -> None:
+    """Forget that a topic was ingested so the next run fetches again."""
+    conn.execute(
+        "UPDATE topics SET ingested_at = NULL WHERE slug = %s",
+        (slug,),
+    )
+
+
 def mark_topic_ingested(
     conn: psycopg.Connection, slug: str, namespace: str, raw_goal: str
 ) -> None:
@@ -33,10 +41,35 @@ def mark_topic_ingested(
         """
         INSERT INTO topics (slug, namespace, raw_goal, ingested_at)
         VALUES (%s, %s, %s, now())
-        ON CONFLICT (slug) DO UPDATE SET ingested_at = now()
+        ON CONFLICT (slug) DO UPDATE SET
+            ingested_at = now(),
+            namespace = EXCLUDED.namespace,
+            raw_goal = EXCLUDED.raw_goal
         """,
         (slug, namespace, raw_goal),
     )
+
+
+def namespace_stats(conn: psycopg.Connection, namespace: str) -> dict:
+    return conn.execute(
+        """
+        SELECT
+            (SELECT count(*) FROM documents WHERE namespace = %s) AS documents,
+            (SELECT count(*) FROM chunks WHERE namespace = %s) AS chunks
+        """,
+        (namespace, namespace),
+    ).fetchone()
+
+
+def namespace_is_populated(conn: psycopg.Connection, namespace: str) -> bool:
+    """True when the namespace has at least one searchable chunk."""
+    row = namespace_stats(conn, namespace)
+    return int(row["chunks"] or 0) > 0
+
+
+def clear_namespace(conn: psycopg.Connection, namespace: str) -> None:
+    """Delete every document (and cascaded chunk) in a namespace."""
+    conn.execute("DELETE FROM documents WHERE namespace = %s", (namespace,))
 
 
 def upsert_document(
@@ -48,7 +81,7 @@ def upsert_document(
     title: str,
     url: str | None,
 ) -> int | None:
-    """Returns the new document id, or None if it was already ingested."""
+    """Insert a new document. Returns its id, or None if it already exists."""
     row = conn.execute(
         """
         INSERT INTO documents (namespace, source, external_id, title, url)
@@ -59,6 +92,55 @@ def upsert_document(
         (namespace, source, external_id, title, url),
     ).fetchone()
     return row["id"] if row else None
+
+
+def get_document_id(
+    conn: psycopg.Connection,
+    *,
+    namespace: str,
+    source: str,
+    external_id: str,
+) -> int | None:
+    row = conn.execute(
+        """
+        SELECT id FROM documents
+        WHERE namespace = %s AND source = %s AND external_id = %s
+        """,
+        (namespace, source, external_id),
+    ).fetchone()
+    return int(row["id"]) if row else None
+
+
+def upsert_or_replace_document(
+    conn: psycopg.Connection,
+    *,
+    namespace: str,
+    source: str,
+    external_id: str,
+    title: str,
+    url: str | None,
+) -> tuple[int, bool]:
+    """Insert or refresh document metadata.
+
+    Returns `(document_id, created)`. When `created` is False the caller should
+    replace chunks if the content may have changed; when True, insert chunks.
+    """
+    row = conn.execute(
+        """
+        INSERT INTO documents (namespace, source, external_id, title, url)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (namespace, source, external_id) DO UPDATE SET
+            title = EXCLUDED.title,
+            url = EXCLUDED.url
+        RETURNING id, (xmax = 0) AS created
+        """,
+        (namespace, source, external_id, title, url),
+    ).fetchone()
+    return int(row["id"]), bool(row["created"])
+
+
+def delete_chunks_for_document(conn: psycopg.Connection, document_id: int) -> None:
+    conn.execute("DELETE FROM chunks WHERE document_id = %s", (document_id,))
 
 
 def insert_chunks(
@@ -82,6 +164,43 @@ def insert_chunks(
         )
 
 
+def replace_chunks(
+    conn: psycopg.Connection,
+    *,
+    document_id: int,
+    namespace: str,
+    texts: list[str],
+    embeddings: list[list[float]],
+) -> None:
+    """Swap a document's chunks for a fresh set (used when content changes)."""
+    delete_chunks_for_document(conn, document_id)
+    insert_chunks(
+        conn,
+        document_id=document_id,
+        namespace=namespace,
+        texts=texts,
+        embeddings=embeddings,
+    )
+
+
+def get_chunks_by_ids(conn: psycopg.Connection, chunk_ids: list[int]) -> list[dict]:
+    """Load chunk rows (with document titles) in the order of `chunk_ids`."""
+    if not chunk_ids:
+        return []
+    rows = conn.execute(
+        """
+        SELECT c.id, c.text, d.title AS document_title, d.url AS document_url,
+               0.0 AS score
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        WHERE c.id = ANY(%s)
+        """,
+        (chunk_ids,),
+    ).fetchall()
+    by_id = {int(r["id"]): dict(r) for r in rows}
+    return [by_id[i] for i in chunk_ids if i in by_id]
+
+
 def search_dense(
     conn: psycopg.Connection, *, namespace: str, query_vec: list[float], k: int
 ) -> list[dict]:
@@ -93,7 +212,7 @@ def search_dense(
                1 - (c.embedding <=> %s::vector) AS score
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
-        WHERE c.namespace = %s
+        WHERE c.namespace = %s AND c.embedding IS NOT NULL
         ORDER BY c.embedding <=> %s::vector
         LIMIT %s
         """,
@@ -118,14 +237,3 @@ def search_sparse(
         """,
         (query, namespace, query, k),
     ).fetchall()
-
-
-def namespace_stats(conn: psycopg.Connection, namespace: str) -> dict:
-    return conn.execute(
-        """
-        SELECT
-            (SELECT count(*) FROM documents WHERE namespace = %s) AS documents,
-            (SELECT count(*) FROM chunks WHERE namespace = %s) AS chunks
-        """,
-        (namespace, namespace),
-    ).fetchone()

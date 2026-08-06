@@ -8,7 +8,7 @@ import type { ModuleState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { AskAbout } from "./ask-about";
-import { CitedText } from "./cited-text";
+import { NotesBody } from "./notes-body";
 import { QuizPanel } from "./quiz-panel";
 
 type Props = {
@@ -202,8 +202,9 @@ export function ModulePanel({
 
       {body ? (
         <div ref={proseRef}>
-          <CitedText
+          <NotesBody
             text={body}
+            streaming={module.status === "streaming"}
             activeId={activeCite}
             onCite={setActiveCite}
             numbering={numbering}

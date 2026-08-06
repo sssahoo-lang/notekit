@@ -59,6 +59,17 @@ def warm(cfg: config.RetrievalConfig) -> None:
         _reranker(cfg.rerank_model)
 
 
+def count_tokens(text: str, cfg: config.RetrievalConfig) -> int:
+    """Token count using the embedding model's tokenizer (not char heuristics)."""
+    try:
+        model = _encoder(cfg.embedding_model)
+        with _load_lock:
+            return int(len(model.tokenizer.encode(text, add_special_tokens=False)))
+    except Exception:  # noqa: BLE001
+        # Offline / first-run without weights: stay close enough for packing.
+        return max(1, len(text) // 4)
+
+
 def embed_documents(texts: list[str], cfg: config.RetrievalConfig) -> list[list[float]]:
     model = _encoder(cfg.embedding_model)
     with _load_lock:
