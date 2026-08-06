@@ -248,16 +248,6 @@ learning goal, independently of style.
 
 ## Known limitations
 
-- **Quiz generation does not reuse the notes call's cached context.** Notes and
-  quiz send the same passages, so the quiz call should read them from cache at a
-  tenth of the input price. It does not. Prompt caching itself works — two plain
-  completions sharing a prefix produce a 4,123-token cache read — but the quiz
-  call uses structured output, and the injected schema changes the request
-  prefix ahead of the cached block, so nothing matches. Sharing one system
-  prompt between the two calls was necessary but not sufficient. The fix is to
-  merge notes and quiz into a single structured call, which removes the
-  duplicated context entirely rather than discounting it; that changes the
-  measured notes path and so needs faithfulness re-measured against the fixture.
 - **arXiv alone is a poor corpus for foundational material.** It indexes the
   research frontier, not pedagogy: a request to teach Q-learning fundamentals
   retrieves papers on continuous-time mean-field extensions, and the system

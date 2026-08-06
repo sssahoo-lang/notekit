@@ -127,6 +127,28 @@ async def astream_complete(
         raise RuntimeError(f"Model declined the request: {final.stop_details}")
 
 
+async def astream_text(
+    *,
+    model: str,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    cached_prefix: str | None = None,
+) -> str:
+    """Collect a plain completion. Same request shape as astream_complete, so a
+    cached prefix written by that call is read rather than re-sent."""
+    chunks: list[str] = []
+    async for delta in astream_complete(
+        model=model,
+        system=system,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        cached_prefix=cached_prefix,
+    ):
+        chunks.append(delta)
+    return "".join(chunks)
+
+
 async def aparse(
     *,
     model: str,

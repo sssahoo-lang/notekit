@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 
 from . import config, embedding, ingest, llm, retrieval
-from .models import Chunk, Module, ModuleNotes, Quiz, Syllabus
+from .models import Chunk, Module, ModuleNotes, Quiz, QuizQuestion, Syllabus
 from .style import StyleProfile
 
 _CITATION = re.compile(r"\[c(\d+)\]")
@@ -61,12 +61,52 @@ no preamble, no closing summary."""
 
 _QUIZ_TASK = """Write {n} multiple-choice questions testing this module.
 
-Each question needs exactly four options and one correct answer. Every question \
-and its correct answer must be derivable from the passages alone — a reader who \
-had only these passages should be able to answer. Wrong options must be \
-plausible but clearly wrong given the passages, never true-but-unmentioned.
+Each question needs exactly four options and one correct answer, derivable \
+from the passages alone. Wrong options must be plausible but clearly wrong \
+given the passages, never true-but-unmentioned.
 
-Cite the supporting passages as [c123] in each explanation."""
+Answer in exactly this format, nothing else:
+
+Q: <question>
+A) <option>
+B) <option>
+C) <option>
+D) <option>
+ANSWER: <A, B, C or D>
+WHY: <one or two sentences, citing passages as [c123]>
+
+Repeat that block for each question, separated by a blank line."""
+
+# Deliberately parsed from plain text rather than requested as structured
+# output. Structured output injects a schema ahead of the cached passages,
+# changing the request prefix, so the quiz call re-paid full price for context
+# the notes call had just sent. Parsing a fixed layout keeps the prefix
+# identical and the passages come back from cache. `parse_quiz` returns None on
+# anything unexpected, and the caller falls back to the structured path.
+_QUIZ_BLOCK = re.compile(
+    r"Q:\s*(?P<q>.+?)\n\s*A\)\s*(?P<a>.+?)\n\s*B\)\s*(?P<b>.+?)\n\s*C\)\s*"
+    r"(?P<c>.+?)\n\s*D\)\s*(?P<d>.+?)\n\s*ANSWER:\s*(?P<ans>[ABCD])\b\s*"
+    r"(?:\n\s*WHY:\s*(?P<why>.+?))?(?=\n\s*Q:|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def parse_quiz(text: str) -> Quiz | None:
+    """Read the fixed question layout. None when it does not match."""
+    questions: list[QuizQuestion] = []
+    for m in _QUIZ_BLOCK.finditer(text):
+        options = [m.group(k).strip() for k in ("a", "b", "c", "d")]
+        if any(not o for o in options):
+            return None
+        questions.append(
+            QuizQuestion(
+                question=m.group("q").strip(),
+                options=options,
+                answer_index="ABCD".index(m.group("ans").upper()),
+                explanation=(m.group("why") or "").strip(),
+            )
+        )
+    return Quiz(questions=questions) if questions else None
 
 
 def plan_syllabus(goal: str) -> Syllabus:
@@ -195,25 +235,34 @@ def generate_quiz(
     passages: str | None = None,
     n: int = 3,
 ) -> Quiz:
-    """Questions answerable from the same passages the notes were written from.
+    """Sync counterpart of `agenerate_quiz`, used by the CLI and eval.
 
-    Reuses the notes call's cached passage block rather than retrieving again,
-    so this costs a fraction of a fresh call.
+    Same reasoning: plain text first so the cached passages are reused, with
+    structured output as the fallback when the layout does not parse.
     """
-    quiz = llm.parse(
+    block = passages or f"Source passages:\n\n{_format_passages(chunks)}"
+    prompt = f"Module: {module.title}\n\n{_QUIZ_TASK.format(n=n)}"
+
+    raw = llm.complete(
         model=config.GENERATION_MODEL,
         system=_GROUNDING_SYSTEM,
-        cached_prefix=passages or f"Source passages:\n\n{_format_passages(chunks)}",
-        prompt=f"Module: {module.title}\n\n{_QUIZ_TASK.format(n=n)}",
+        cached_prefix=block,
+        prompt=prompt,
         max_tokens=config.MAX_TOKENS_QUIZ,
-        schema=Quiz,
     )
+    quiz = parse_quiz(raw)
 
-    # A question whose answer index is out of range is unusable; drop it rather
-    # than showing a quiz with no correct answer.
-    quiz.questions = [
-        q for q in quiz.questions if 0 <= q.answer_index < len(q.options)
-    ]
+    if quiz is None:
+        quiz = llm.parse(
+            model=config.GENERATION_MODEL,
+            system=_GROUNDING_SYSTEM,
+            cached_prefix=block,
+            prompt=prompt,
+            max_tokens=config.MAX_TOKENS_QUIZ,
+            schema=Quiz,
+        )
+
+    quiz.questions = [q for q in quiz.questions if 0 <= q.answer_index < len(q.options)]
     return quiz
 
 
@@ -320,14 +369,34 @@ async def astream_module_notes(
 async def agenerate_quiz(
     module: Module, chunks: list[Chunk], *, passages: str | None = None, n: int = 3
 ) -> Quiz:
-    quiz = await llm.aparse(
+    """Questions from the same passages the notes were written from.
+
+    Tries the plain-text path first, which reuses the cached passages; falls
+    back to structured output if the layout comes back unparseable, so a format
+    slip costs money rather than the feature.
+    """
+    block = passages or f"Source passages:\n\n{_format_passages(chunks)}"
+    prompt = f"Module: {module.title}\n\n{_QUIZ_TASK.format(n=n)}"
+
+    raw = await llm.astream_text(
         model=config.GENERATION_MODEL,
         system=_GROUNDING_SYSTEM,
-        cached_prefix=passages or f"Source passages:\n\n{_format_passages(chunks)}",
-        prompt=f"Module: {module.title}\n\n{_QUIZ_TASK.format(n=n)}",
+        cached_prefix=block,
+        prompt=prompt,
         max_tokens=config.MAX_TOKENS_QUIZ,
-        schema=Quiz,
     )
+    quiz = parse_quiz(raw)
+
+    if quiz is None:
+        quiz = await llm.aparse(
+            model=config.GENERATION_MODEL,
+            system=_GROUNDING_SYSTEM,
+            cached_prefix=block,
+            prompt=prompt,
+            max_tokens=config.MAX_TOKENS_QUIZ,
+            schema=Quiz,
+        )
+
     quiz.questions = [q for q in quiz.questions if 0 <= q.answer_index < len(q.options)]
     return quiz
 
