@@ -19,7 +19,15 @@ type Props = {
   /** Needed to ask about a passage; null until the course has been saved. */
   courseId?: number | null;
   userId?: string;
+  expanded?: boolean;
+  onToggle?: () => void;
 };
+
+/** Rough reading time. 200 wpm is the usual estimate for considered reading. */
+function readingMinutes(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
 
 export function ModulePanel({
   module,
@@ -28,8 +36,11 @@ export function ModulePanel({
   onVisible,
   courseId = null,
   userId,
+  expanded = true,
+  onToggle,
 }: Props) {
   const [activeCite, setActiveCite] = useState<number | null>(null);
+  const [quizOpen, setQuizOpen] = useState(false);
   const articleRef = useRef<HTMLElement>(null);
   const proseRef = useRef<HTMLDivElement>(null);
   const chunks = module.notes?.chunks;
@@ -75,18 +86,49 @@ export function ModulePanel({
       ref={articleRef}
       className="rounded-2xl border border-border/50 bg-paper/70 px-5 py-8 shadow-[0_1px_0_oklch(0.9_0.01_95)] sm:px-8"
     >
-      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <p className="font-mono text-[0.7rem] tracking-[0.14em] text-muted-foreground uppercase">
-            Section {module.index + 1}
-            {read ? " · read" : ""}
-          </p>
-          <h2 className="font-heading mt-1 text-2xl tracking-tight text-ink">
-            {module.title}
-          </h2>
-        </div>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={`section-body-${module.index}`}
+          className="group flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "mt-1.5 text-muted-foreground transition-transform duration-150 ease-out motion-reduce:transition-none",
+              expanded && "rotate-90",
+            )}
+          >
+            ›
+          </span>
+          <span className="min-w-0">
+            <span className="block font-mono text-[0.7rem] tracking-[0.14em] text-muted-foreground uppercase">
+              Section {module.index + 1}
+              {read ? " · read" : ""}
+              {body ? ` · ${readingMinutes(body)} min` : ""}
+            </span>
+            <h2 className="font-heading mt-1 text-2xl tracking-tight text-ink transition-colors group-hover:text-primary">
+              {module.title}
+            </h2>
+          </span>
+        </button>
         <StatusBadge module={module} />
       </header>
+
+      {/* Collapsed: enough of the opening to recognise the section by. */}
+      {!expanded && body ? (
+        <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
+          {body.replace(/\[c\d+\]/g, "").trim()}
+        </p>
+      ) : null}
+
+      <div
+        id={`section-body-${module.index}`}
+        hidden={!expanded}
+        className="mt-5"
+      >
 
       {module.error ? (
         <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -152,8 +194,31 @@ export function ModulePanel({
       ) : null}
 
       {module.notes?.quiz && !module.notes.refused ? (
-        <div className="mt-8">
-          <QuizPanel quiz={module.notes.quiz} onCite={setActiveCite} />
+        <div className="mt-8 border-t border-border/60 pt-5">
+          <button
+            type="button"
+            onClick={() => setQuizOpen((v) => !v)}
+            aria-expanded={quizOpen}
+            aria-controls={`quiz-${module.index}`}
+            className="flex items-center gap-2 text-sm font-medium text-foreground/80 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "transition-transform duration-150 ease-out motion-reduce:transition-none",
+                quizOpen && "rotate-90",
+              )}
+            >
+              ›
+            </span>
+            Practice questions
+            <span className="font-normal text-muted-foreground">
+              ({module.notes.quiz.questions.length})
+            </span>
+          </button>
+          <div id={`quiz-${module.index}`} hidden={!quizOpen} className="mt-5">
+            <QuizPanel quiz={module.notes.quiz} onCite={setActiveCite} />
+          </div>
         </div>
       ) : null}
 
@@ -220,6 +285,7 @@ export function ModulePanel({
           <p className="text-sm leading-relaxed text-ink/80">{activeChunk.text}</p>
         </aside>
       ) : null}
+      </div>
     </article>
   );
 }

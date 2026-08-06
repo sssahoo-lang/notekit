@@ -93,7 +93,6 @@ function applyCourseEvent(
     setModules: (
       next: ModuleState[] | ((prev: ModuleState[]) => ModuleState[]),
     ) => void;
-    setCost: (c: number | null) => void;
     setError: (e: string | null) => void;
     setActiveCourseId: (id: number | null) => void;
   },
@@ -167,7 +166,6 @@ function applyCourseEvent(
       );
       break;
     case "done":
-      setters.setCost(event.estimated_cost_usd);
       setters.setPhase("done");
       break;
     case "cancelled":
@@ -198,7 +196,6 @@ export function CourseWorkspace() {
   const [detail, setDetail] = useState("");
   const [summary, setSummary] = useState<string | null>(null);
   const [modules, setModules] = useState<ModuleState[]>([]);
-  const [cost, setCost] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingLibrary, setLoadingLibrary] = useState(true);
   const [generatedHere, setGeneratedHere] = useState(false);
@@ -309,9 +306,6 @@ export function CourseWorkspace() {
           setModules(mapSavedModules(course));
           setCourseStatus(course.generation_status ?? "complete");
           setSummary(course.summary);
-          if (course.estimated_cost_usd != null) {
-            setCost(course.estimated_cost_usd);
-          }
           if (profile) void refreshLibrary(profile);
         })
         .catch(() => undefined);
@@ -344,7 +338,6 @@ export function CourseWorkspace() {
     setDetail("");
     setSummary(null);
     setModules([]);
-    setCost(null);
     setError(null);
     setGeneratedHere(false);
     setCourseStatus(null);
@@ -389,7 +382,6 @@ export function CourseWorkspace() {
       setActiveCourseId(course.id);
       setGoal(course.goal);
       setSummary(course.summary);
-      setCost(course.estimated_cost_usd);
       setModules(mapped);
       setModulesRead(Array.isArray(read) ? read : []);
       setActiveSection(
@@ -444,7 +436,6 @@ export function CourseWorkspace() {
     setDetail,
     setSummary,
     setModules,
-    setCost,
     setError,
     setActiveCourseId,
   };
@@ -512,7 +503,6 @@ export function CourseWorkspace() {
     setModules([]);
     setModulesRead([]);
     setSummary(null);
-    setCost(null);
     setPhase("planning");
     setDetail("");
     setGeneratedHere(true);
@@ -641,7 +631,6 @@ export function CourseWorkspace() {
           goal={goal}
           summary={summary}
           modules={modules}
-          cost={cost}
           generatedHere={generatedHere}
           phase={phase}
           detail={detail}
@@ -675,7 +664,6 @@ function CourseReader({
   goal,
   summary,
   modules,
-  cost,
   generatedHere,
   phase,
   detail,
@@ -699,7 +687,6 @@ function CourseReader({
   goal: string;
   summary: string | null;
   modules: ModuleState[];
-  cost: number | null;
   generatedHere: boolean;
   phase: RunPhase;
   detail: string;
@@ -720,6 +707,34 @@ function CourseReader({
   onSelectSection: (index: number) => void;
   onBookmark: (index: number) => void;
 }) {
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  // Open where the reader left off, and nothing else. Re-runs when the course
+  // changes so opening a different one does not inherit the last one's state.
+  useEffect(() => {
+    setExpanded(new Set([activeSection]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
+
+  // A section being written must be visible, or streaming happens off-screen.
+  useEffect(() => {
+    const live = modules
+      .filter((m) => m.status === "streaming" || m.status === "pending")
+      .map((m) => m.index);
+    if (live.length) setExpanded((prev) => new Set([...prev, ...live]));
+  }, [modules]);
+
+  const allOpen = expanded.size >= modules.length && modules.length > 0;
+
+  function toggleSection(index: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
+
   const showRunStatus =
     running ||
     courseStatus === "generating" ||
@@ -738,11 +753,6 @@ function CourseReader({
             <Button size="sm" variant="secondary" onClick={onResume}>
               Resume generation
             </Button>
-          ) : null}
-          {cost != null && generatedHere ? (
-            <span className="text-sm text-muted-foreground">
-              Cost to build: ${cost.toFixed(2)}
-            </span>
           ) : null}
         </div>
       </div>
@@ -785,11 +795,33 @@ function CourseReader({
           onSelect={(index) => {
             onSelectSection(index);
             onBookmark(index);
+            // Jumping to a collapsed section should reveal it.
+            setExpanded((prev) => new Set([...prev, index]));
           }}
         />
 
         <div className="min-w-0">
-          <div className="space-y-10">
+          {modules.length > 1 ? (
+            <div className="mb-4 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() =>
+                  setExpanded(
+                    allOpen
+                      ? new Set()
+                      : new Set(modules.map((m) => m.index)),
+                  )
+                }
+              >
+                {allOpen ? "Collapse all" : "Expand all"}
+              </Button>
+            </div>
+          ) : null}
+
+          <div className="space-y-6">
         {modules.map((m) => (
           <div
             key={m.index}
@@ -801,6 +833,8 @@ function CourseReader({
               read={modulesRead.includes(m.index)}
               courseId={courseId}
               userId={userId}
+              expanded={expanded.has(m.index)}
+              onToggle={() => toggleSection(m.index)}
               onMarkRead={() => onMarkRead(m.index)}
               onVisible={() => {
                 onSelectSection(m.index);
