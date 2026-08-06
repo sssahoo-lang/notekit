@@ -53,6 +53,14 @@ the threshold sits inside it:
 uv run notekit calibrate evalsets/q-learning.json
 ```
 
+Diagrams are measured too. Notes may include a Mermaid flowchart where the
+passages describe a process or hierarchy, and every edge of one is an assertion
+— so the evaluator converts each edge into a sentence ("Agent takes Action.",
+"Environment leads to Reward.") and checks it for entailment alongside the
+prose. Mermaid rather than a generated image for exactly this reason: the
+source is text, so it can be read, cited and scored. A generated picture can be
+confidently wrong with nothing to check it against.
+
 One caveat applies to every number above: faithfulness is judged by Haiku
 against notes written by Sonnet. Same model family, so the grader shares blind
 spots with the writer, and the figure is better read as a regression signal than

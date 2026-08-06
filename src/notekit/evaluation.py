@@ -13,6 +13,8 @@ Nothing in this module is on the user-facing critical path.
 
 from __future__ import annotations
 
+import re
+
 from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field
@@ -23,26 +25,36 @@ from .models import Chunk, Module, ModuleNotes
 _CLAIMS_SYSTEM = """You decompose study notes into atomic factual claims.
 
 An atomic claim is a single assertion that can be checked on its own. Split \
-compound sentences. Resolve pronouns to what they refer to, so each claim \
-stands alone without context.
+compound sentences. Resolve pronouns to their referents so each claim stands \
+alone without surrounding context.
 
-Ignore citation markers like [c123]. Ignore sentences that make no factual \
-assertion, such as transitions or restatements of the module title."""
+Ignore citation markers like [c123]. Ignore fenced Mermaid diagram source \
+(code between ```mermaid and ```). Ignore sentences that make no factual \
+assertion — transitions, hedges with no content, or restatements of the module \
+title. Keep paraphrases of definitions, mechanisms, numbers, and examples."""
 
-_VERDICT_SYSTEM = """You check whether claims are supported by source passages.
+_VERDICT_SYSTEM = """You check whether claims are entailed by source passages.
 
-For each numbered claim, decide whether the passages entail it. Judge only \
-what the passages actually say: a claim that is true in general but absent \
-from the passages is NOT supported. A claim that paraphrases the passages \
-faithfully IS supported.
+For each numbered claim, decide supported = true only when the passages \
+themselves justify the claim (including faithful paraphrase). Judge only what \
+the passages say:
 
-Give a one-sentence reason for every verdict."""
+- True in general but absent from the passages → NOT supported.
+- Slightly stronger than the passages (extra mechanism, number, or example) → \
+NOT supported.
+- Faithful paraphrase or tight condensation of the passages → supported.
+
+Give a one-sentence reason for every verdict that points at the decisive \
+passage content (or the absence of it)."""
 
 _COVERAGE_SYSTEM = """You check whether study notes address stated learning goals.
 
-For each numbered goal, decide whether the notes give a reader enough to meet \
-it. Partial treatment that leaves the goal substantially unmet counts as not \
-addressed."""
+For each numbered goal, decide addressed = true only when a reader of the notes \
+could meet that goal without outside knowledge. Partial treatment that leaves \
+the core of the goal unmet counts as not addressed. A brief mention without \
+enough explanation also counts as not addressed.
+
+Give a one-sentence reason for every verdict."""
 
 
 class _Claims(BaseModel):
@@ -100,6 +112,64 @@ class ModuleEval(BaseModel):
         return [c for c in self.claims if not c.supported]
 
 
+_MERMAID = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+# flowchart:  A[Label] -->|edge text| B(Other)
+_FLOW_EDGE = re.compile(
+    r"([A-Za-z0-9_]+)\s*(?:\[([^\]]*)\]|\(([^)]*)\)|\{([^}]*)\})?\s*"
+    r"-[-.=]*(?:>|->)\s*(?:\|([^|]*)\|\s*)?"
+    r"([A-Za-z0-9_]+)\s*(?:\[([^\]]*)\]|\(([^)]*)\)|\{([^}]*)\})?"
+)
+# sequenceDiagram:  A->>B: message
+_SEQ_EDGE = re.compile(r"([A-Za-z0-9_]+)\s*-[->x)]{1,3}\s*([A-Za-z0-9_]+)\s*:\s*(.+)")
+
+
+def diagram_claims(body: str) -> list[str]:
+    """Turn Mermaid diagrams into checkable sentences.
+
+    A diagram asserts things — every arrow is a claim about how two ideas
+    relate — but the claim extractor is told to skip fenced source, so those
+    assertions were never scored. Converting them here is deterministic: no
+    extra model call, and the wording stays close to what the diagram draws.
+    """
+    claims: list[str] = []
+    labels: dict[str, str] = {}
+
+    for block in _MERMAID.findall(body):
+        for line in block.splitlines():
+            line = line.strip()
+            if not line or line.startswith("%%"):
+                continue
+
+            seq = _SEQ_EDGE.match(line)
+            if seq:
+                src, dst, message = seq.groups()
+                claims.append(
+                    f"{labels.get(src, src)} → {labels.get(dst, dst)}: "
+                    f"{message.strip()}."
+                )
+                continue
+
+            edge = _FLOW_EDGE.search(line)
+            if not edge:
+                continue
+            g = edge.groups()
+            src_id, edge_text, dst_id = g[0], g[4], g[5]
+            src = next((x for x in g[1:4] if x), None)
+            dst = next((x for x in g[6:9] if x), None)
+            if src:
+                labels[src_id] = src
+            if dst:
+                labels[dst_id] = dst
+            a = labels.get(src_id, src_id)
+            b = labels.get(dst_id, dst_id)
+            claims.append(
+                f"{a} {edge_text.strip()} {b}." if edge_text
+                else f"{a} leads to {b}."
+            )
+
+    return claims
+
+
 def _passages(chunks: list[Chunk]) -> str:
     return "\n\n".join(f"[{c.citation_key}] {c.text}" for c in chunks)
 
@@ -118,10 +188,13 @@ def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
         max_tokens=4000,
         schema=_Claims,
     )
-    if not extracted.claims:
+    # Diagrams assert things too, and the extractor is told to skip their
+    # source, so their edges are added here and checked alongside the prose.
+    all_claims = list(extracted.claims) + diagram_claims(notes.body)
+    if not all_claims:
         return ModuleEval(module_title=notes.module_title)
 
-    numbered = "\n".join(f"{i}. {c}" for i, c in enumerate(extracted.claims, 1))
+    numbered = "\n".join(f"{i}. {c}" for i, c in enumerate(all_claims, 1))
     verdicts = llm.parse(
         model=config.JUDGE_MODEL,
         system=_VERDICT_SYSTEM,
@@ -142,7 +215,7 @@ def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
             supported=by_index[i].supported if i in by_index else False,
             reason=by_index[i].reason if i in by_index else "No verdict returned.",
         )
-        for i, claim in enumerate(extracted.claims, 1)
+        for i, claim in enumerate(all_claims, 1)
     ]
 
     goals = "\n".join(f"{i}. {g}" for i, g in enumerate(module.learning_goals, 1))
