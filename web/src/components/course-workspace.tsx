@@ -1,25 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ContinueCard } from "@/components/continue-card";
+import { CourseForm } from "@/components/course-form";
 import { LibraryList } from "@/components/library-list";
 import { ModulePanel } from "@/components/module-panel";
 import { RunError, RunStatus, type RunPhase } from "@/components/run-status";
 import { SectionRail } from "@/components/section-rail";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import {
   cancelCourse,
   claimCourses,
@@ -227,6 +217,15 @@ export function CourseWorkspace() {
     [sources, profile],
   );
 
+  // Derived rather than corrected in an effect: if the material backing the
+  // current choice disappears, fall back to finding sources. Writing this as
+  // state-fixing-state caused a cascading render.
+  const effectiveSource =
+    sourceMode !== AUTO_SOURCE &&
+    !uploads.some((ns) => ns.namespace === sourceMode)
+      ? AUTO_SOURCE
+      : sourceMode;
+
   // The sidebar owns navigation now: it asks for a course, this answers.
   useEffect(() => {
     if (nav.requestedCourseId == null) return;
@@ -429,17 +428,6 @@ export function CourseWorkspace() {
     }
   }
 
-  // If the uploaded material backing the current choice goes away, fall back to
-  // finding sources. Otherwise the selector hides while still pointing at a
-  // namespace the reader can no longer see or change.
-  useEffect(() => {
-    if (sourceMode === AUTO_SOURCE) return;
-    if (!uploads.some((ns) => ns.namespace === sourceMode)) {
-      setSourceMode(AUTO_SOURCE);
-      setUploadNs(null);
-    }
-  }, [uploads, sourceMode]);
-
   function pickSourceMode(value: string | null) {
     if (!value) return;
     if (value === AUTO_SOURCE) {
@@ -511,7 +499,7 @@ export function CourseWorkspace() {
 
   async function start() {
     if (!goal.trim() || running) return;
-    if (sourceMode !== AUTO_SOURCE && !uploadNs) {
+    if (effectiveSource !== AUTO_SOURCE && !uploadNs) {
       toast.error("Choose your materials, or add some under Materials");
       return;
     }
@@ -539,7 +527,7 @@ export function CourseWorkspace() {
             user: userId,
             use_style: useStyle && hasStyle,
             with_quiz: withQuiz,
-            namespace: sourceMode === AUTO_SOURCE ? null : uploadNs,
+            namespace: effectiveSource === AUTO_SOURCE ? null : uploadNs,
           },
           controller.signal,
         ),
@@ -611,117 +599,23 @@ export function CourseWorkspace() {
             </div>
           ) : null}
 
-          <section aria-labelledby="new-heading" className="mt-10">
-            <h2 id="new-heading" className="text-lg font-medium text-ink">
-              Start a course
-            </h2>
-
-            <div className="mt-4 space-y-5 rounded-2xl border border-border/80 bg-card/90 p-5 shadow-[0_1px_0_oklch(0.9_0.01_220)] sm:p-6">
-              <div>
-                <Label htmlFor="goal" className="text-sm font-medium">
-                  What should this course teach you?
-                </Label>
-                <Textarea
-                  id="goal"
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                  rows={3}
-                  className="mt-2 text-base"
-                  placeholder="e.g. Teach me Q-learning at an intermediate level"
-                  aria-describedby="goal-help"
-                />
-                <p
-                  id="goal-help"
-                  className="mt-1.5 text-sm text-muted-foreground"
-                >
-                  Be specific about the level — it changes how the notes are
-                  written. Every goal is saved to History.
-                </p>
-              </div>
-
-              {/* With nothing uploaded there is only one possible answer, so
-                  the control is noise in front of the primary action. It
-                  appears once there is a real choice to make. */}
-              {uploads.length > 0 ? (
-                <div>
-                  <Label htmlFor="source" className="text-sm font-medium">
-                    Where should the notes come from?
-                  </Label>
-                  <Select value={sourceMode} onValueChange={pickSourceMode}>
-                    <SelectTrigger id="source" className="mt-2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={AUTO_SOURCE}>
-                        Find sources for me
-                      </SelectItem>
-                      {uploads.map((ns) => (
-                        <SelectItem key={ns.namespace} value={ns.namespace}>
-                          My material: {ns.namespace.replace(`user-${userId}-`, "")} (
-                          {ns.documents} file{ns.documents === 1 ? "" : "s"})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="mt-1.5 text-sm text-muted-foreground">
-                    {sourceMode === AUTO_SOURCE
-                      ? "Wikipedia and arXiv for this topic."
-                      : "Notes will be written only from your own files."}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Sources come from Wikipedia and arXiv. To study from your own
-                  PDFs instead, add them under{" "}
-                  <Link
-                    href="/upload"
-                    className="font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    Materials
-                  </Link>
-                  .
-                </p>
-              )}
-
-              <fieldset className="space-y-2.5">
-                <legend className="text-sm font-medium">Options</legend>
-                <div className="flex items-center gap-2.5">
-                  <Checkbox
-                    id="quiz"
-                    checked={withQuiz}
-                    onCheckedChange={(v) => setWithQuiz(v === true)}
-                  />
-                  <Label htmlFor="quiz" className="text-sm font-normal">
-                    Add practice questions to each section
-                  </Label>
-                </div>
-                {hasStyle ? (
-                  <div className="flex items-center gap-2.5">
-                    <Checkbox
-                      id="style"
-                      checked={useStyle}
-                      onCheckedChange={(v) => setUseStyle(v === true)}
-                    />
-                    <Label htmlFor="style" className="text-sm font-normal">
-                      Write in my style
-                    </Label>
-                  </div>
-                ) : null}
-              </fieldset>
-
-              <Button
-                onClick={() => void start()}
-                disabled={!goal.trim()}
-                className="w-full sm:w-auto"
-              >
-                Build my course
-              </Button>
-              <p className="text-sm text-muted-foreground">
-                Sections appear as they&apos;re written. You can leave — writing
-                continues in the background and everything is saved.
-              </p>
-            </div>
-          </section>
+          <div className="mt-10">
+            <CourseForm
+              goal={goal}
+              onGoalChange={setGoal}
+              sourceMode={effectiveSource}
+              onSourceChange={pickSourceMode}
+              autoSourceValue={AUTO_SOURCE}
+              uploads={uploads}
+              userId={userId}
+              withQuiz={withQuiz}
+              onQuizChange={setWithQuiz}
+              useStyle={useStyle}
+              onStyleChange={setUseStyle}
+              hasStyle={hasStyle}
+              onSubmit={() => void start()}
+            />
+          </div>
 
           {error ? (
             <div className="mt-6">
@@ -862,6 +756,25 @@ function CourseReader({
       </h1>
       {summary ? (
         <p className="mt-2 max-w-prose text-muted-foreground">{summary}</p>
+      ) : null}
+
+      {showRunStatus ? (
+        <div className="mt-6">
+          <RunStatus
+            phase={phase}
+            detail={detail}
+            modulesDone={modulesDone}
+            modulesTotal={modules.length}
+            onCancel={running ? onCancel : undefined}
+          />
+        </div>
+      ) : null}
+
+      {/* A failure part-way through a course was previously silent here. */}
+      {error ? (
+        <div className="mt-4">
+          <RunError message={error} onRetry={onRetry} />
+        </div>
       ) : null}
 
       <div className="mt-6 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
