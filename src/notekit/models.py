@@ -19,6 +19,7 @@ class Syllabus(BaseModel):
     """Structured output of the planner call."""
 
     title: str = Field(
+        default="",
         description=(
             "A short title for the course, three to six words, in sentence "
             "case. This is what the learner sees in their library, so it must "

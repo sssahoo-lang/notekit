@@ -18,7 +18,12 @@ export type CourseProgress = {
   /** Indices of sections the reader has marked as read. */
   modules_read?: number[];
   /** Where they stopped, so reopening lands in the right place. */
-  bookmark?: { module_index: number; anchor?: string } | null;
+  bookmark?: {
+    module_index: number;
+    /** Index of the paragraph being read within that section. */
+    paragraph?: number;
+    anchor?: string;
+  } | null;
 };
 
 export type GenerationStatus = "generating" | "complete" | "partial";

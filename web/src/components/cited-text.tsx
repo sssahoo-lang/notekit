@@ -22,6 +22,11 @@ type Props = {
 
 type Token = string | { ids: number[] };
 
+/** Split on blank lines so each paragraph is a real element. */
+function toParagraphs(text: string): string[] {
+  return text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+}
+
 /**
  * Note body with its citations.
  *
@@ -40,6 +45,40 @@ export function CitedText({
   numbering,
   hidden = false,
 }: Props) {
+  const paragraphs = useMemo(() => toParagraphs(text), [text]);
+
+  return (
+    <div className={cn(className)}>
+      {paragraphs.map((paragraph, index) => (
+        <Paragraph
+          key={index}
+          index={index}
+          text={paragraph}
+          activeId={activeId}
+          onCite={onCite}
+          numbering={numbering}
+          hidden={hidden}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Paragraph({
+  index,
+  text,
+  activeId,
+  onCite,
+  numbering,
+  hidden,
+}: {
+  index: number;
+  text: string;
+  activeId?: number | null;
+  onCite?: (id: number) => void;
+  numbering?: Map<number, number>;
+  hidden: boolean;
+}) {
   const tokens = useMemo(() => {
     const raw: Token[] = [];
     let last = 0;
@@ -79,7 +118,7 @@ export function CitedText({
   }, [text]);
 
   return (
-    <div className={cn("whitespace-pre-wrap", className)}>
+    <p data-paragraph={index} className="mt-4 first:mt-0">
       {tokens.map((token, i) => {
         if (typeof token === "string") {
           // Markers sat after a space ("word [c1]"), which left a gap once they
@@ -119,6 +158,6 @@ export function CitedText({
           </sup>
         );
       })}
-    </div>
+    </p>
   );
 }

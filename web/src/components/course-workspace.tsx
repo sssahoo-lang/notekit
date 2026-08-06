@@ -203,6 +203,14 @@ export function CourseWorkspace() {
     "generating" | "complete" | "partial" | null
   >(null);
   const [modulesRead, setModulesRead] = useState<number[]>([]);
+  const [restore, setRestore] = useState<{
+    section: number;
+    paragraph: number;
+  } | null>(null);
+  // Where reading currently is, saved with the bookmark rather than on every
+  // scroll — a PATCH per paragraph would be a request every few seconds.
+  const paragraphRef = useRef(0);
+  const paragraphSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeSection, setActiveSection] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -349,11 +357,12 @@ export function CourseWorkspace() {
     courseId: number,
     read: number[],
     bookmarkIndex: number,
+    bookmarkParagraph = 0,
   ) {
     try {
       await saveProgress(courseId, {
         modules_read: read,
-        bookmark: { module_index: bookmarkIndex },
+        bookmark: { module_index: bookmarkIndex, paragraph: bookmarkParagraph },
       });
       if (profile) void refreshLibrary(profile);
     } catch {
@@ -378,6 +387,7 @@ export function CourseWorkspace() {
       const mapped = mapSavedModules(course);
       const read = course.progress?.modules_read ?? [];
       const bookmark = course.progress?.bookmark?.module_index ?? 0;
+      const bookmarkPara = course.progress?.bookmark?.paragraph ?? null;
 
       setActiveCourseId(course.id);
       setGoal(course.goal);
@@ -386,6 +396,11 @@ export function CourseWorkspace() {
       setModulesRead(Array.isArray(read) ? read : []);
       setActiveSection(
         typeof bookmark === "number" && bookmark < mapped.length ? bookmark : 0,
+      );
+      setRestore(
+        typeof bookmark === "number" && typeof bookmarkPara === "number"
+          ? { section: bookmark, paragraph: bookmarkPara }
+          : null,
       );
       setCourseStatus(course.generation_status ?? "complete");
       setGeneratedHere(false);
@@ -649,11 +664,35 @@ export function CourseWorkspace() {
           onRetry={() => void start()}
           onMarkRead={(index) => void markRead(index)}
           onSelectSection={setActiveSection}
-          onBookmark={(index) => {
+          onBookmark={(index, paragraph) => {
             if (activeCourseId != null) {
-              void persistProgress(activeCourseId, modulesRead, index);
+              void persistProgress(
+                activeCourseId,
+                modulesRead,
+                index,
+                paragraph ?? paragraphRef.current,
+              );
             }
           }}
+          onParagraph={(paragraph) => {
+            if (paragraphRef.current === paragraph) return;
+            paragraphRef.current = paragraph;
+            // Debounced: a PATCH per paragraph would fire every few seconds
+            // while reading. Two seconds after scrolling settles is enough to
+            // survive closing the tab.
+            if (paragraphSaveRef.current) clearTimeout(paragraphSaveRef.current);
+            paragraphSaveRef.current = setTimeout(() => {
+              if (activeCourseId != null) {
+                void persistProgress(
+                  activeCourseId,
+                  modulesRead,
+                  activeSection,
+                  paragraph,
+                );
+              }
+            }, 2000);
+          }}
+          restore={restore}
         />
       )}
     </div>
@@ -683,6 +722,8 @@ function CourseReader({
   onMarkRead,
   onSelectSection,
   onBookmark,
+  onParagraph,
+  restore,
 }: {
   goal: string;
   summary: string | null;
@@ -705,7 +746,9 @@ function CourseReader({
   onRetry: () => void;
   onMarkRead: (index: number) => void;
   onSelectSection: (index: number) => void;
-  onBookmark: (index: number) => void;
+  onBookmark: (index: number, paragraph?: number) => void;
+  onParagraph: (paragraph: number) => void;
+  restore: { section: number; paragraph: number } | null;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [showCitations, setShowCitations] = useState(true);
@@ -806,7 +849,7 @@ function CourseReader({
           readIndices={modulesRead}
           onSelect={(index) => {
             onSelectSection(index);
-            onBookmark(index);
+            onBookmark(index, 0);
             // Jumping to a collapsed section should reveal it.
             setExpanded((prev) => new Set([...prev, index]));
           }}
@@ -858,13 +901,19 @@ function CourseReader({
               expanded={expanded.has(m.index)}
               onToggle={() => toggleSection(m.index)}
               showCitations={showCitations}
+              onParagraph={
+                m.index === activeSection ? onParagraph : undefined
+              }
+              restoreParagraph={
+                restore && restore.section === m.index ? restore.paragraph : null
+              }
               onAdvance={
                 m.index + 1 < modules.length
                   ? () => {
                       const next = m.index + 1;
                       setExpanded((prev) => new Set([...prev, next]));
                       onSelectSection(next);
-                      onBookmark(next);
+                      onBookmark(next, 0);
                       requestAnimationFrame(() => {
                         const el = document.getElementById(`section-${next}`);
                         const reduced = window.matchMedia(

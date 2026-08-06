@@ -25,6 +25,10 @@ type Props = {
   showCitations?: boolean;
   /** Opens the next section and scrolls to it, when there is one. */
   onAdvance?: () => void;
+  /** Reports the paragraph currently at the top of the reading area. */
+  onParagraph?: (paragraph: number) => void;
+  /** Paragraph to restore on open, from a stored bookmark. */
+  restoreParagraph?: number | null;
 };
 
 /** Rough reading time. 200 wpm is the usual estimate for considered reading. */
@@ -44,6 +48,8 @@ export function ModulePanel({
   onToggle,
   showCitations = true,
   onAdvance,
+  onParagraph,
+  restoreParagraph = null,
 }: Props) {
   const [activeCite, setActiveCite] = useState<number | null>(null);
   const [quizOpen, setQuizOpen] = useState(false);
@@ -77,6 +83,47 @@ export function ModulePanel({
     onMarkRead &&
     !read &&
     (module.status === "done" || module.status === "refused");
+
+  // Track which paragraph is being read, so a bookmark can point at it rather
+  // than at the top of a 1,400-word section.
+  useEffect(() => {
+    if (!onParagraph || !expanded || !proseRef.current) return;
+    const paragraphs = proseRef.current.querySelectorAll("[data-paragraph]");
+    if (!paragraphs.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const top = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (!top) return;
+        const index = Number(
+          (top.target as HTMLElement).dataset.paragraph ?? "0",
+        );
+        onParagraph(index);
+      },
+      { rootMargin: "-20% 0px -70% 0px", threshold: 0 },
+    );
+    paragraphs.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [onParagraph, expanded, body]);
+
+  // Restore the bookmarked paragraph once, when the section first opens.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || !expanded || restoreParagraph == null) return;
+    if (!proseRef.current) return;
+    const target = proseRef.current.querySelector(
+      `[data-paragraph="${restoreParagraph}"]`,
+    );
+    if (!target) return;
+    restoredRef.current = true;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({
+      behavior: reduced ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [expanded, restoreParagraph]);
 
   useEffect(() => {
     if (!onVisible || !articleRef.current) return;
