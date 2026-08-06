@@ -9,7 +9,7 @@ source material, with every claim cited back to the passage it came from.
 |---|---|
 | 1. Core loop — ingest, retrieve, generate cited notes | working end to end |
 | 2. Eval layer — faithfulness, coverage, refusal calibration | working; Langfuse tracing not yet wired |
-| 3. Quiz generation | working; does not yet reuse the notes cache |
+| 3. Quiz generation | working; reuses the notes cache |
 | 4. Upload adapter, per-user namespaces, style matching | working |
 | 5. Open-domain routing | not started |
 | 6. Next.js UI | working locally (`web/`) |
@@ -26,6 +26,7 @@ learning goals) against a 13-document corpus drawn from Wikipedia and arXiv:
 | Refusal accuracy | **100%** (16/16 probe questions classified correctly) |
 | Coverage | 42–67% — too noisy to quote as a single figure, see below |
 | Cost per evaluated course | $0.22–0.38 |
+| Cost per course with practice questions | $0.34 (was $0.66) |
 
 **Coverage is not yet a trustworthy metric.** Two runs of the *same* fixed
 syllabus returned 41.7% and 66.7% — a 25-point swing with nothing changed.
