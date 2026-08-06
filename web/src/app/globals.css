@@ -83,6 +83,15 @@
   --chart-4: oklch(0.7 0.05 180);
   --chart-5: oklch(0.35 0.03 230);
   --radius: 0.625rem;
+
+  /* Motion. Durations sit in the 150-300ms band where transitions read as
+     responsive rather than sluggish; entrances ease out (fast then settling),
+     exits ease in, because that is how physical things arrive and leave. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --motion-slow: 300ms;
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --sidebar: oklch(0.97 0.01 220);
   --sidebar-foreground: oklch(0.22 0.02 240);
   --sidebar-primary: oklch(0.4 0.07 205);
@@ -114,6 +123,22 @@
   .measure {
     max-width: 68ch;
   }
+  /* Content arriving: a short rise plus fade. Only transform and opacity are
+     animated, so nothing here can trigger layout while prose is being read. */
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 6px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .rise-in {
+    animation: rise-in var(--motion-slow) var(--ease-enter) both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

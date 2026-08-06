@@ -1,5 +1,6 @@
 "use client";
 
+import { ProgressBar } from "@/components/progress-bar";
 import { Button } from "@/components/ui/button";
 import {
   generationStatus,
@@ -57,7 +58,7 @@ export function ContinueCard({
   return (
     <section
       aria-labelledby="continue-heading"
-      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-transparent p-5 sm:p-6"
+      className="rise-in rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-transparent p-5 sm:p-6"
     >
       <h2
         id="continue-heading"
@@ -80,27 +81,16 @@ export function ContinueCard({
       ) : null}
 
       {total > 0 && (generating || read > 0) ? (
-        <div
-          className="mt-4 h-1.5 overflow-hidden rounded-full bg-primary/12"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={total}
-          aria-valuenow={generating ? (course.usable_count ?? 0) : read}
-          aria-label={
+        <ProgressBar
+          className="mt-4 bg-primary/12"
+          value={generating ? (course.usable_count ?? 0) : read}
+          max={total}
+          label={
             generating
               ? `${course.usable_count ?? 0} of ${total} sections ready`
               : `${read} of ${total} sections read`
           }
-        >
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
-            style={{
-              width: `${Math.round(
-                ((generating ? (course.usable_count ?? 0) : read) / total) * 100,
-              )}%`,
-            }}
-          />
-        </div>
+        />
       ) : null}
 
       <Button className="mt-5" onClick={() => onOpen(course.id)}>

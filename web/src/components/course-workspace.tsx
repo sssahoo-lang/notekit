@@ -589,7 +589,10 @@ export function CourseWorkspace() {
       }
     >
       {showHome ? (
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-12">
+        <div
+          key="home"
+          className="rise-in lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-12"
+        >
           <div className="min-w-0">
           <h1 className="font-heading text-3xl tracking-tight text-ink">
             {profile?.name
@@ -878,7 +881,7 @@ function CourseReader({
           <div
             key={m.index}
             id={`section-${m.index}`}
-            className="animate-in fade-in duration-300"
+            className="rise-in"
           >
             <ModulePanel
               module={m}

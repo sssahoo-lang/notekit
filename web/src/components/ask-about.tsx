@@ -132,7 +132,7 @@ export function AskAbout({
           <Button
             type="button"
             size="sm"
-            className="shadow-lg"
+            className="rise-in shadow-lg"
             onClick={() => open(selection.text)}
           >
             Explain this
@@ -158,7 +158,7 @@ export function AskAbout({
             tabIndex={-1}
             role="group"
             aria-label="Ask about this passage"
-            className="rounded-xl border border-primary/30 bg-primary/[0.04] p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="rise-in rounded-xl border border-primary/30 bg-primary/[0.04] p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <p className="text-xs tracking-wide text-muted-foreground uppercase">
               You highlighted

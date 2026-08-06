@@ -1,5 +1,6 @@
 "use client";
 
+import { ProgressBar } from "@/components/progress-bar";
 import type { ModuleState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +29,13 @@ function goTo(index: number, onSelect: (i: number) => void) {
   onSelect(index);
   const target = document.getElementById(`section-${index}`);
   if (!target) return;
-  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  // scrollIntoView ignores prefers-reduced-motion, so a smooth jump across
+  // twenty screens would fly past regardless of the setting. Honour it.
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  target.scrollIntoView({
+    behavior: reduced ? "auto" : "smooth",
+    block: "start",
+  });
   // Move focus so keyboard users follow the jump rather than staying put and
   // tabbing from wherever they were.
   const heading = target.querySelector("h2");
@@ -100,19 +107,12 @@ export function SectionRail({
           </ol>
         </details>
 
-        <div
-          className="mt-2 h-1 overflow-hidden rounded-full bg-muted"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={modules.length}
-          aria-valuenow={readCount}
-          aria-label={`${readCount} of ${modules.length} sections read`}
-        >
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-500"
-            style={{ width: `${(readCount / modules.length) * 100}%` }}
-          />
-        </div>
+        <ProgressBar
+          className="mt-2 h-1"
+          value={readCount}
+          max={modules.length}
+          label={`${readCount} of ${modules.length} sections read`}
+        />
       </div>
 
       {/* Wide screens: a rail that stays put. */}

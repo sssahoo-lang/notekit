@@ -1,5 +1,6 @@
 "use client";
 
+import { ProgressBar } from "@/components/progress-bar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -100,21 +101,12 @@ export function RunStatus({
       </div>
 
       {showCount ? (
-        <div
-          className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={modulesTotal}
-          aria-valuenow={modulesDone}
-          aria-label="Sections written"
-        >
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-500"
-            style={{
-              width: `${Math.round((modulesDone / Math.max(modulesTotal, 1)) * 100)}%`,
-            }}
-          />
-        </div>
+        <ProgressBar
+          className="mt-3"
+          value={modulesDone}
+          max={modulesTotal}
+          label="Sections written"
+        />
       ) : null}
     </div>
   );
