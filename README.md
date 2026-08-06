@@ -53,6 +53,28 @@ the threshold sits inside it:
 uv run notekit calibrate evalsets/q-learning.json
 ```
 
+### Retrieval configurations
+
+`notekit sweep --syllabus fixtures/q-learning.json -n q-learning` scores each
+configuration in `config.SWEEP` on the same syllabus and corpus. One run each:
+
+| Config | Faithfulness | Claims |
+|---|---|---|
+| baseline (hybrid + rerank) | 89.6% | 201 |
+| no-rerank | 85.2% | 155 |
+| dense-only | 88.8% | 134 |
+| large-chunks | needs its own index | — |
+
+**This does not establish that reranking helps.** Best minus worst is 4.4
+points, and repeated runs of a *single* configuration on this fixture have
+varied by 4.6 points. The gap is inside the noise. Distinguishing these
+configurations needs `--repeat 3` or more, and the command now says so rather
+than presenting an ordering as a finding.
+
+`large-chunks` changes chunk size, which is decided at ingestion, so it needs
+its own index rather than being compared against one built with different
+settings.
+
 Diagrams are measured too. Notes may include a Mermaid flowchart where the
 passages describe a process or hierarchy, and every edge of one is an assertion
 — so the evaluator converts each edge into a sentence ("Agent takes Action.",
