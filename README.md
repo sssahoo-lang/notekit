@@ -105,10 +105,19 @@ uv run notekit calibrate evalsets/q-learning.json
 ## Web UI
 
 ```bash
-# --reload-dir src keeps .venv package churn from killing long course runs
-uv run uvicorn notekit.api:app --reload --reload-dir src --port 8000
+./scripts/dev.sh            # API on :8000 — checks the env, frees the port, starts postgres
 cd web && cp .env.local.example .env.local && npm install && npm run dev
 ```
+
+If anything misbehaves, `./scripts/doctor.sh` reports what is wrong and repairs
+what it can. It exists because the editable install of `notekit` broke several
+times during development — `ModuleNotFoundError: No module named 'notekit'` from
+a virtualenv that had worked minutes earlier. The cause was never reproducible
+on demand (concurrent `uv run`, `uv sync --reinstall-package`, and plain
+reinstalls were each tried and none of them broke it), so `dev.sh` sets
+`PYTHONPATH=src` and makes it not matter: imports work whether or not the `.pth`
+survives, and `doctor.sh` reinstalls it for the `notekit` console script, which
+has no such fallback.
 
 Open [http://localhost:3000](http://localhost:3000). Course generation streams
 over SSE; Upload and Style pages cover the milestone-4 surfaces. Details in
