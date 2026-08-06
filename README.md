@@ -89,6 +89,30 @@ spots with the writer, and the figure is better read as a regression signal than
 as ground truth. An independent judge — a different provider, or spot-checking
 by hand against a labelled set — is the way to establish that properly.
 
+## Orchestration
+
+The synchronous path can run through a LangGraph state graph:
+
+```bash
+uv run notekit course "teach me Q-learning" --graph
+```
+
+A straight line of plan → gather → write does not need a graph, and this project
+ran as a for-loop for a long time. What earns it is the failure we actually hit:
+build a course on a corpus that turns out to be thin and sections refuse —
+correctly, but leaving a mostly empty course and no recourse. The graph branches
+on that. After writing it counts refusals, and if enough sections had nothing to
+work from it widens the corpus using the refused sections' own queries and
+rewrites only those, then finishes.
+
+Two guards matter. A course built from uploaded material never widens, because
+fetching from the open web would silently break the promise that it used only
+your files. And there is one retry, not a loop — a corpus that stays thin after
+widening is telling you something true.
+
+The streaming API path keeps its own orchestration: it emits tokens as they
+arrive and cancels mid-flight, neither of which the graph models.
+
 ## Tracing
 
 Every model call funnels through `llm.py`, so Langfuse hooks in at one place and

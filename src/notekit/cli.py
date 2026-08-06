@@ -10,7 +10,8 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from . import (
-    calibration, config, db, evaluation, ingest, llm, retrieval, style, sweep, upload,
+    calibration, config, db, evaluation, graph, ingest, llm, retrieval, style,
+    sweep, upload,
 )
 from .adapters import DEFAULT_ADAPTERS
 from .models import Syllabus
@@ -77,6 +78,12 @@ def course_cmd(
     user: str = typer.Option(
         None, "--user", "-u", help="Write in this user's learned style"
     ),
+    graph_mode: bool = typer.Option(
+        False,
+        "--graph",
+        help="Run through the LangGraph loop, which widens the corpus and "
+        "retries when too many sections refuse",
+    ),
 ) -> None:
     """Plan a syllabus and write cited notes for every module."""
     llm.reset_usage()
@@ -90,14 +97,25 @@ def course_cmd(
     elif profile:
         console.print(f"[dim]style: {user}[/]")
 
-    syllabus, notes = run_course(
-        goal,
-        limit=limit,
-        skip_ingest=skip_ingest,
-        with_quiz=quiz,
-        namespace=namespace,
-        style=profile,
-    )
+    if graph_mode:
+        console.print("[dim]orchestration: langgraph[/]")
+        syllabus, notes = graph.run(
+            goal=goal,
+            limit=limit,
+            skip_ingest=skip_ingest,
+            with_quiz=quiz,
+            namespace=namespace,
+            style=profile,
+        )
+    else:
+        syllabus, notes = run_course(
+            goal,
+            limit=limit,
+            skip_ingest=skip_ingest,
+            with_quiz=quiz,
+            namespace=namespace,
+            style=profile,
+        )
 
     console.print(f"\n[bold]{syllabus.summary}[/]")
     console.print(f"[dim]namespace: {namespace or syllabus.topic_slug}[/]\n")
