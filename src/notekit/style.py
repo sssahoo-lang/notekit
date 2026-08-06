@@ -97,6 +97,7 @@ def learn(sample: str) -> StyleProfile:
         prompt=f"Writing sample:\n\n{sample[:12000]}",
         max_tokens=1500,
         schema=StyleProfile,
+        purpose="learn-style",
     )
 
 

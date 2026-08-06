@@ -8,7 +8,7 @@ source material, with every claim cited back to the passage it came from.
 | Milestone | State |
 |---|---|
 | 1. Core loop — ingest, retrieve, generate cited notes | working end to end |
-| 2. Eval layer — faithfulness, coverage, refusal calibration | working; Langfuse tracing not yet wired |
+| 2. Eval layer — faithfulness, coverage, refusal calibration, tracing | working |
 | 3. Quiz generation | working; reuses the notes cache |
 | 4. Upload adapter, per-user namespaces, style matching | working |
 | 5. Open-domain routing | not started |
@@ -88,6 +88,19 @@ against notes written by Sonnet. Same model family, so the grader shares blind
 spots with the writer, and the figure is better read as a regression signal than
 as ground truth. An independent judge — a different provider, or spot-checking
 by hand against a labelled set — is the way to establish that properly.
+
+## Tracing
+
+Every model call funnels through `llm.py`, so Langfuse hooks in at one place and
+each call is labelled with what it was for — `plan-syllabus`, `write-notes`,
+`quiz`, `judge-extract-claims`, `judge-verdicts`, `judge-coverage`,
+`explain-selection`, `learn-style` — with tokens, cache reads, latency and
+errors attached.
+
+It is off unless `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set, and
+failures inside tracing are swallowed. A missing or unreachable observability
+backend must never stop someone studying, and an unreachable host is verified
+not to raise.
 
 ## Setup
 

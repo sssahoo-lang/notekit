@@ -187,6 +187,7 @@ def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
         prompt=f"Study notes:\n\n{notes.body}",
         max_tokens=4000,
         schema=_Claims,
+        purpose="judge-extract-claims",
     )
     # Diagrams assert things too, and the extractor is told to skip their
     # source, so their edges are added here and checked alongside the prose.
@@ -204,6 +205,7 @@ def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
         ),
         max_tokens=8000,
         schema=_Verdicts,
+        purpose="judge-verdicts",
     )
 
     by_index = {v.claim_index: v for v in verdicts.verdicts}
@@ -225,6 +227,7 @@ def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
         prompt=f"Study notes:\n\n{notes.body}\n\nLearning goals:\n{goals}",
         max_tokens=2000,
         schema=_GoalVerdicts,
+        purpose="judge-coverage",
     )
     by_goal = {v.goal_index: v for v in goal_verdicts.verdicts}
     coverage = [

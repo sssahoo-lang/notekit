@@ -59,6 +59,7 @@ def explain(
             f"{style_instruction}"
         ),
         max_tokens=config.MAX_TOKENS_EXPLAIN,
+        purpose="explain-selection",
     )
 
 

@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
-from . import config
+from . import config, tracing
 from .models import Usage
 
 _client = anthropic.Anthropic()
@@ -28,6 +28,15 @@ _client = anthropic.Anthropic()
 _aclient = anthropic.AsyncAnthropic()
 _lock = threading.Lock()
 _usage: dict[str, Usage] = defaultdict(lambda: Usage(model="unknown"))
+
+
+def _usage_dict(usage) -> dict:
+    return {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
+        "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+    }
 
 
 def _record(model: str, usage) -> None:
@@ -77,6 +86,7 @@ def complete(
     prompt: str,
     max_tokens: int,
     cached_prefix: str | None = None,
+    purpose: str = "complete",
 ) -> str:
     """A plain text completion.
 
@@ -86,18 +96,24 @@ def complete(
     """
     content = _content_blocks(prompt, cached_prefix)
 
-    response = _client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": content}],
-    )
-    _record(model, response.usage)
+    with tracing.generation(
+        name=purpose, model=model, prompt=prompt, metadata={"cached": bool(cached_prefix)}
+    ) as span:
+        response = _client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": content}],
+        )
+        _record(model, response.usage)
+        span["usage"] = _usage_dict(response.usage)
 
-    if response.stop_reason == "refusal":
-        raise RuntimeError(f"Model declined the request: {response.stop_details}")
+        if response.stop_reason == "refusal":
+            raise RuntimeError(f"Model declined the request: {response.stop_details}")
 
-    return "".join(b.text for b in response.content if b.type == "text")
+        text = "".join(b.text for b in response.content if b.type == "text")
+        span["output"] = text
+        return text
 
 
 async def astream_complete(
@@ -107,24 +123,32 @@ async def astream_complete(
     prompt: str,
     max_tokens: int,
     cached_prefix: str | None = None,
+    purpose: str = "stream",
 ) -> AsyncIterator[str]:
     """Yield text deltas as they arrive. Usage is recorded when the stream ends."""
     extra = {"thinking": config.GENERATION_THINKING} if config.GENERATION_THINKING else {}
 
-    async with _aclient.messages.stream(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": _content_blocks(prompt, cached_prefix)}],
-        **extra,
-    ) as stream:
-        async for text in stream.text_stream:
-            yield text
-        final = await stream.get_final_message()
+    with tracing.generation(
+        name=purpose, model=model, prompt=prompt, metadata={"streamed": True}
+    ) as span:
+        collected: list[str] = []
+        async with _aclient.messages.stream(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": _content_blocks(prompt, cached_prefix)}],
+            **extra,
+        ) as stream:
+            async for text in stream.text_stream:
+                collected.append(text)
+                yield text
+            final = await stream.get_final_message()
 
-    _record(model, final.usage)
-    if final.stop_reason == "refusal":
-        raise RuntimeError(f"Model declined the request: {final.stop_details}")
+        _record(model, final.usage)
+        span["usage"] = _usage_dict(final.usage)
+        span["output"] = "".join(collected)
+        if final.stop_reason == "refusal":
+            raise RuntimeError(f"Model declined the request: {final.stop_details}")
 
 
 async def astream_text(
@@ -157,19 +181,27 @@ async def aparse(
     max_tokens: int,
     schema: type[T],
     cached_prefix: str | None = None,
+    purpose: str = "parse",
 ) -> T:
-    response = await _aclient.messages.parse(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": _content_blocks(prompt, cached_prefix)}],
-        output_format=schema,
-    )
-    _record(model, response.usage)
+    with tracing.generation(
+        name=purpose, model=model, prompt=prompt, metadata={"schema": schema.__name__}
+    ) as span:
+        response = await _aclient.messages.parse(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": _content_blocks(prompt, cached_prefix)}],
+            output_format=schema,
+        )
+        _record(model, response.usage)
+        span["usage"] = _usage_dict(response.usage)
 
-    if response.parsed_output is None:
-        raise RuntimeError(f"Structured output failed (stop_reason={response.stop_reason})")
-    return response.parsed_output
+        if response.parsed_output is None:
+            raise RuntimeError(
+                f"Structured output failed (stop_reason={response.stop_reason})"
+            )
+        span["output"] = response.parsed_output
+        return response.parsed_output
 
 
 def parse(
@@ -180,19 +212,27 @@ def parse(
     max_tokens: int,
     schema: type[T],
     cached_prefix: str | None = None,
+    purpose: str = "parse",
 ) -> T:
     """A completion constrained to a pydantic schema."""
     content = _content_blocks(prompt, cached_prefix)
 
-    response = _client.messages.parse(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": content}],
-        output_format=schema,
-    )
-    _record(model, response.usage)
+    with tracing.generation(
+        name=purpose, model=model, prompt=prompt, metadata={"schema": schema.__name__}
+    ) as span:
+        response = _client.messages.parse(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": content}],
+            output_format=schema,
+        )
+        _record(model, response.usage)
+        span["usage"] = _usage_dict(response.usage)
 
-    if response.parsed_output is None:
-        raise RuntimeError(f"Structured output failed (stop_reason={response.stop_reason})")
-    return response.parsed_output
+        if response.parsed_output is None:
+            raise RuntimeError(
+                f"Structured output failed (stop_reason={response.stop_reason})"
+            )
+        span["output"] = response.parsed_output
+        return response.parsed_output

@@ -179,6 +179,7 @@ def plan_syllabus(goal: str) -> Syllabus:
         ),
         max_tokens=config.MAX_TOKENS_PLAN,
         schema=Syllabus,
+        purpose="plan-syllabus",
     )
 
 
@@ -254,6 +255,7 @@ def generate_module_notes(
             f"{_NOTES_TASK}{style_instruction}"
         ),
         max_tokens=config.MAX_TOKENS_NOTES,
+        purpose="write-notes",
     )
 
     if body.strip().startswith(_REFUSAL_MARKER):
@@ -311,6 +313,7 @@ def generate_quiz(
         cached_prefix=block,
         prompt=prompt,
         max_tokens=config.MAX_TOKENS_QUIZ,
+        purpose="quiz",
     )
     quiz = parse_quiz(raw)
 
@@ -376,6 +379,7 @@ async def astream_module_notes(
             f"{_NOTES_TASK}{style_instruction}"
         ),
         max_tokens=config.MAX_TOKENS_NOTES,
+        purpose="write-notes",
     ):
         body += delta
         if holding:
@@ -446,6 +450,7 @@ async def agenerate_quiz(
         cached_prefix=block,
         prompt=prompt,
         max_tokens=config.MAX_TOKENS_QUIZ,
+        purpose="quiz",
     )
     quiz = parse_quiz(raw)
 
