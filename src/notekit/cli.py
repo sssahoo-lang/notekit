@@ -10,7 +10,7 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from . import (
-    calibration, config, db, evaluation, ingest, llm, retrieval, style, upload,
+    calibration, config, db, evaluation, ingest, llm, retrieval, style, sweep, upload,
 )
 from .adapters import DEFAULT_ADAPTERS
 from .models import Syllabus
@@ -423,6 +423,98 @@ def eval_cmd(
                 console.print(f"  why:   {c.reason}", markup=False)
 
     _print_usage()
+
+
+@app.command("sweep")
+def sweep_cmd(
+    syllabus_path: str = typer.Option(
+        ..., "--syllabus", help="Fixture JSON from `notekit plan --save`"
+    ),
+    namespace: str = typer.Option(..., "--namespace", "-n", help="Corpus to use"),
+    repeat: int = typer.Option(1, help="Runs per configuration"),
+    limit: int = typer.Option(
+        0, help="Only the first N configurations. 0 runs all of them."
+    ),
+) -> None:
+    """Compare the retrieval configurations in config.SWEEP on one syllabus.
+
+    Costs roughly one evaluated course per configuration per repeat, so a full
+    four-config sweep at --repeat 2 is eight courses. Start with --limit 2.
+    """
+    fixture = Syllabus.model_validate_json(Path(syllabus_path).read_text())
+    configs = config.SWEEP[:limit] if limit else config.SWEEP
+
+    console.print(
+        f"[dim]{len(configs)} configurations x {repeat} run(s) on "
+        f"'{namespace}' — about {len(configs) * repeat} courses[/]\n"
+    )
+
+    def progress(r: sweep.ConfigResult) -> None:
+        if r.skipped:
+            console.print(f"  [yellow]{r.name}[/] skipped — {r.skipped}")
+        else:
+            f = r.faithfulness
+            console.print(
+                f"  [green]{r.name}[/] "
+                f"{f:.1%} over {r.claims} claims"
+                if f is not None
+                else f"  [yellow]{r.name}[/] no claims scored"
+            )
+
+    results = sweep.run_sweep(
+        fixture,
+        namespace=namespace,
+        repeat=repeat,
+        configs=configs,
+        on_progress=progress,
+    )
+
+    table = Table(title="Retrieval configurations", title_style="dim")
+    for column in ("config", "faithfulness", "spread", "claims", "cost"):
+        table.add_column(column)
+    for r in results:
+        if r.skipped:
+            table.add_row(r.name, "—", "—", "—", "—")
+            continue
+        table.add_row(
+            r.name,
+            f"{r.faithfulness:.1%}" if r.faithfulness is not None else "—",
+            f"{r.spread * 100:.1f} pts" if r.spread is not None else "—",
+            str(r.claims),
+            f"${r.cost_usd:.2f}",
+        )
+    console.print(table)
+
+    scored = [r for r in results if r.faithfulness is not None]
+    if len(scored) > 1:
+        spread = max(r.faithfulness for r in scored) - min(
+            r.faithfulness for r in scored
+        )
+        within = max((r.spread or 0) for r in scored)
+        console.print(f"\nBest minus worst: {spread * 100:.1f} pts.")
+        if repeat < 2:
+            # With one run per configuration there is no noise estimate at all,
+            # so an ordering here says nothing. The fixture's own run-to-run
+            # spread has been measured at 4.6 points, which is wider than most
+            # gaps this sweep produces.
+            console.print(
+                "[yellow]One run per configuration measures no noise, so this "
+                "ordering is not evidence. Repeated runs of a single "
+                "configuration on this fixture have varied by 4.6 points — "
+                "wider than most gaps above. Use --repeat 3 or more before "
+                "concluding anything.[/]"
+            )
+        else:
+            console.print(f"Largest within-config spread: {within * 100:.1f} pts.")
+            if spread <= within:
+                console.print(
+                    "[yellow]The gap between configurations does not exceed the "
+                    "noise within one — this does not distinguish them. Raise "
+                    "--repeat further before drawing a conclusion.[/]"
+                )
+    for r in results:
+        if r.skipped:
+            console.print(f"[dim]{r.name}: {r.skipped}[/]")
 
 
 @app.command("stats")
