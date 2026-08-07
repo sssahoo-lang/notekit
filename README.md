@@ -14,8 +14,6 @@ The refusal and the grounding are not promises — they are measured. **95% of
 generated claims are verified against their retrieved context, and 100% of
 deliberately out-of-scope questions are correctly refused.**
 
-<!-- Screenshots go here once the UI and deploy are final. -->
-
 ---
 
 ## What it does
