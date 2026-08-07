@@ -62,6 +62,12 @@ uv run notekit calibrate evalsets/q-learning.json
 
 Three lanes, separated by whether they are allowed to make you wait.
 
+[![NoteKit architecture](docs/architecture.svg)](docs/architecture.svg)
+
+<sub>Full-size diagram: [docs/architecture.svg](docs/architecture.svg)</sub>
+
+The same three lanes, in brief:
+
 ```mermaid
 flowchart LR
     subgraph cold["❄️ Cold lane — never blocks the reader"]
