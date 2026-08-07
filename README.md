@@ -3,6 +3,13 @@
 **Study notes written only from sources it has actually read — with every claim
 cited, and an honest "your sources don't cover this" when they don't.**
 
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Postgres](https://img.shields.io/badge/Postgres_16-pgvector-4169E1?logo=postgresql&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js_16-000000?logo=nextdotjs&logoColor=white)
+![Faithfulness](https://img.shields.io/badge/faithfulness-95.3%25-15803D)
+![Refusal accuracy](https://img.shields.io/badge/refusal_accuracy-100%25-15803D)
+
 Most AI study tools always give you an answer. You cannot tell which sentences
 came from a real source and which the model invented, and they never admit when
 they have nothing to work from. NoteKit is a retrieval-augmented generation
@@ -13,6 +20,21 @@ when retrieval comes back thin.
 The refusal and the grounding are not promises — they are measured. **95% of
 generated claims are verified against their retrieved context, and 100% of
 deliberately out-of-scope questions are correctly refused.**
+
+### Contents
+
+[What it does](#what-it-does) ·
+[Results](#results) ·
+[Quick start](#quick-start) ·
+[How it works](#how-it-works) ·
+[What makes it different](#what-makes-it-different) ·
+[Usage](#usage) ·
+[Evaluation and tracing](#evaluation-and-tracing) ·
+[Deploying](#deploying) ·
+[Project layout](#project-layout) ·
+[Engineering notes](#engineering-notes) ·
+[Limitations](#limitations-and-what-isnt-proven) ·
+[Status](#status)
 
 ---
 
@@ -57,6 +79,36 @@ clean and the threshold sits inside it:
 ```bash
 uv run notekit calibrate evalsets/q-learning.json
 ```
+
+## Quick start
+
+**Requirements** — Python 3.11+, Docker (for Postgres + pgvector),
+[uv](https://docs.astral.sh/uv/), Node 20+ (for the web UI), and an Anthropic
+API key.
+
+Embeddings (`bge-small-en-v1.5`) and reranking (`ms-marco-MiniLM-L-6-v2`) run
+**locally**, so `ANTHROPIC_API_KEY` is the only secret required. The first run
+downloads about 220MB of model weights.
+
+```bash
+git clone https://github.com/sssahoo-lang/notekit.git
+cd notekit
+
+docker compose up -d      # Postgres 16 + pgvector on :5433
+uv sync                   # Python dependencies
+cp .env.example .env      # then add your ANTHROPIC_API_KEY
+```
+
+```bash
+./scripts/dev.sh                        # API on :8000
+cd web && npm install && npm run dev    # UI on :3000
+```
+
+Then open [localhost:3000](http://localhost:3000).
+
+`./scripts/dev.sh` checks the environment, frees a stale port, and starts
+Postgres if it is down. If anything misbehaves, `./scripts/doctor.sh` diagnoses
+and repairs what it can.
 
 ## How it works
 
@@ -205,45 +257,9 @@ the point.
 
 ---
 
-# Getting started
+## Usage
 
-## Requirements
-
-- Python 3.11+
-- Docker (for Postgres + pgvector)
-- [uv](https://docs.astral.sh/uv/)
-- Node 20+ (for the web UI)
-- An Anthropic API key
-
-Embeddings (`bge-small-en-v1.5`) and reranking (`ms-marco-MiniLM-L-6-v2`) run
-**locally**, so `ANTHROPIC_API_KEY` is the only secret required. The first run
-downloads about 220MB of model weights.
-
-## Setup
-
-```bash
-git clone https://github.com/sssahoo-lang/notekit.git
-cd notekit
-
-docker compose up -d      # Postgres 16 + pgvector on :5433
-uv sync                   # Python dependencies
-cp .env.example .env      # then add your ANTHROPIC_API_KEY
-```
-
-## Running
-
-```bash
-./scripts/dev.sh                        # API on :8000
-cd web && npm install && npm run dev    # UI on :3000
-```
-
-Then open [localhost:3000](http://localhost:3000).
-
-`./scripts/dev.sh` checks the environment, frees a stale port, and starts
-Postgres if it is down. If anything misbehaves, `./scripts/doctor.sh` diagnoses
-and repairs what it can.
-
-## CLI
+### CLI
 
 ```bash
 # Fetch and index a corpus. No API key needed.
@@ -273,7 +289,7 @@ uv run notekit calibrate evalsets/q-learning.json
 uv run notekit sweep --syllabus fixtures/q-learning.json -n q-learning --repeat 3
 ```
 
-## HTTP API
+### HTTP API
 
 | Endpoint | Purpose |
 |---|---|
@@ -288,15 +304,15 @@ uv run notekit sweep --syllabus fixtures/q-learning.json -n q-learning --repeat 
 | `POST /api/calibrate` | Run a refusal calibration set |
 
 `POST /api/course` emits: `planning`, `syllabus`, `ingesting`, `ingested`,
-`module_start`, `token`, `module`, `module_error`, `saved`, `done`, `error`.
-Sections arrive in completion order, each carrying an `index` for the client to
-place it by. A failure mid-stream arrives as an `error` event rather than an
-HTTP status, because the headers are long gone by then.
+`module_start`, `token`, `module`, `module_error`, `saved`, `cancelled`, `done`,
+`error`. Sections arrive in completion order, each carrying an `index` for the
+client to place it by. A failure mid-stream arrives as an `error` event rather
+than an HTTP status, because the headers are long gone by then.
 
 Generation continues if the client disconnects; `POST /api/courses/{id}/cancel`
 stops it explicitly.
 
-## Tracing
+## Evaluation and tracing
 
 Every model call funnels through `llm.py`, so [Langfuse](https://langfuse.com)
 hooks in at one place, with each call labelled by purpose — `plan-syllabus`,
@@ -358,11 +374,14 @@ fixtures/         Frozen syllabi so evaluation runs are comparable
 
 ---
 
-# Engineering notes
+## Engineering notes
 
-The parts that took measurement rather than guesswork.
+The parts that took measurement rather than guesswork. Expand any of them.
 
-## Streaming: threads were the wrong tool
+<details>
+<summary><b>Streaming: threads were the wrong tool</b> — 52.3s → 18.4s to first prose</summary>
+
+<br>
 
 Time-to-first-prose was 52 seconds. The obvious suspects were wrong — retrieval
 takes 3.9s for all four sections, and four raw concurrent API streams reach
@@ -385,7 +404,12 @@ Much of the remaining wait is simply that the notes are long: given
 `MAX_TOKENS_NOTES = 4000` the model writes ~5,800 characters, taking 37s against
 8.7s at `max_tokens=700`.
 
-## Prompt caching: structured output broke the prefix
+</details>
+
+<details>
+<summary><b>Prompt caching: structured output broke the prefix</b> — $0.658 → $0.339 per course</summary>
+
+<br>
 
 A course with practice questions cost $0.658 against $0.25 without, because the
 quiz call re-sent the passages the notes call had just sent. Caching should have
@@ -404,7 +428,12 @@ notes call exactly.
 | Cache read | 0 | 40,548 tokens |
 | Cost with questions | $0.658 | **$0.339** |
 
-## Style matching costs about 10 points of faithfulness
+</details>
+
+<details>
+<summary><b>Style matching costs about 10 points of faithfulness</b> — so it ships off by default</summary>
+
+<br>
 
 A profile learned from casual writing about databases produced Q-learning notes
 that opened conversationally and explained exploration-versus-exploitation
@@ -429,7 +458,12 @@ Matching how someone *writes* is in scope; matching how they *understand* is
 not, since mirroring a learner's misconceptions would reinforce errors while
 citing correct sources.
 
-## Citations had to stop fighting the prose
+</details>
+
+<details>
+<summary><b>Citations had to stop fighting the prose</b> — 4.1 → 2.7 markers per hundred words</summary>
+
+<br>
 
 At 4.1 markers per hundred words, drawn as filled monospace chips reading
 `c2751`, citations interrupted the line more often than a comma. Three changes
@@ -439,7 +473,12 @@ markers merged — the model frequently emits `[c1291][c1327]` for a single clai
 A "hide citations" toggle turns markers off entirely; the source list stays
 either way, so nothing becomes uncheckable.
 
-## A venv that broke for a reason nothing reported
+</details>
+
+<details>
+<summary><b>A venv that broke for a reason nothing reported</b> — macOS APFS clones, hidden <code>.pth</code> files</summary>
+
+<br>
 
 `ModuleNotFoundError: No module named 'notekit'` kept appearing from a
 virtualenv that had worked minutes earlier. Four hypotheses were wrong:
@@ -461,7 +500,12 @@ over eight consecutive runs with the `.pth` still flagged hidden.
 `scripts/doctor.sh` writes it, `scripts/dev.sh` calls doctor first, and
 `PYTHONPATH=src` remains as a third backstop.
 
-## Reading a 7,000-word course
+</details>
+
+<details>
+<summary><b>Reading a 7,000-word course</b> — 21,019px of scroll down to 3,067px</summary>
+
+<br>
 
 Every section open at once made a course roughly twenty screens of
 uninterrupted scroll with no way to skim it. Sections now collapse — the same
@@ -470,9 +514,11 @@ from the rail revealing its target, and a section being written forcing itself
 open so streaming never happens off-screen. Bookmarks record the paragraph, not
 just the section.
 
+</details>
+
 ---
 
-# Limitations and what isn't proven
+## Limitations and what isn't proven
 
 Stated plainly, because a measurement you cannot trust is worse than none.
 
@@ -508,9 +554,11 @@ Best minus worst is 4.4 points against 4.6 points of run-to-run noise. The gap
 is inside the noise; `--repeat 3` or more is needed before concluding anything,
 and the command says so rather than presenting an ordering as a finding.
 
-**No authentication.** Uploads are isolated per user and verified not to leak
-across namespaces, but `--user` is taken on trust. This is isolation, not access
-control, and needs real auth before more than one person uses it.
+**No real authentication.** A deployed instance can be put behind one shared
+password, but everyone who gets in shares one identity. Uploads are isolated per
+user and verified not to leak across namespaces, yet `--user` is still taken on
+trust. This is isolation between browsers, not access control between people,
+and it needs real auth before more than one person uses it.
 
 **Other gaps.** Scanned PDFs are rejected rather than OCR'd. Topic
 canonicalisation relies on the planner emitting a consistent slug, so close
@@ -520,7 +568,7 @@ is why Wikipedia is fetched alongside it.
 
 ---
 
-# Status
+## Status
 
 | Milestone | State |
 |---|---|
