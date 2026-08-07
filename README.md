@@ -1,7 +1,6 @@
 # NoteKit
 
-**Study notes written only from sources it has actually read — with every claim
-cited, and an honest "your sources don't cover this" when they don't.**
+**Study notes you can fact-check line by line.**
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
