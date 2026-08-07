@@ -120,7 +120,7 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
     options = { ...init, headers };
   }
 
-  const res = await request(`${path}`, options);
+  const res = await fetch(`${API_BASE}${path}`, options);
   if (res.status === 401) {
     // Stale or absent: drop it so the gate prompts again rather than looping.
     clearSiteToken();
