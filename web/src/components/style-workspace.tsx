@@ -21,7 +21,11 @@ export function StyleWorkspace() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // See upload-workspace.tsx: getProfile() must run post-hydration, not in
+    // a lazy initializer, or the server's "anonymous" stub and the client's
+    // real profile disagree on first paint.
     const id = getProfile().id;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUserId(id);
     getStyle(id)
       .then(setProfile)

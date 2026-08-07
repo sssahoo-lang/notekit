@@ -62,8 +62,8 @@ export function ModulePanel({
   );
   const chunkList = chunks ?? [];
   const numbering = useMemo(
-    () => new Map(chunkList.map((c, i) => [c.id, i + 1])),
-    [chunkList],
+    () => new Map((chunks ?? []).map((c, i) => [c.id, i + 1])),
+    [chunks],
   );
   const activeChunk = activeCite != null ? chunkMap.get(activeCite) : null;
 

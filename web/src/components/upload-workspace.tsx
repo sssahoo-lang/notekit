@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -20,6 +21,12 @@ export function UploadWorkspace() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // getProfile() reads localStorage and returns an "anonymous" stub when
+    // window is undefined, so the server render and the client's first paint
+    // agree. Reading it eagerly (e.g. a useState lazy initializer, which also
+    // runs during hydration) would make that first client render disagree
+    // with the server's — a hydration mismatch, not a fix.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProfile(getProfile());
   }, []);
 
@@ -120,12 +127,12 @@ export function UploadWorkspace() {
         ) : (
           <p className="text-sm text-muted-foreground">
             After indexing, choose these materials when you start a course on{" "}
-            <a
+            <Link
               href="/"
               className="font-medium text-primary underline-offset-4 hover:underline"
             >
               Study
-            </a>
+            </Link>
             .
           </p>
         )}

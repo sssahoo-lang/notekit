@@ -243,7 +243,6 @@ export function CourseWorkspace() {
   useEffect(() => {
     if (nav.homeToken === 0) return;
     resetView();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nav.homeToken]);
 
   const refreshLibrary = useCallback(async (p: Profile) => {
@@ -754,6 +753,10 @@ function CourseReader({
   const [showCitations, setShowCitations] = useState(true);
 
   useEffect(() => {
+    // Reads localStorage, which is unavailable during SSR; running this in a
+    // lazy initializer instead would make the server's default and the
+    // client's stored preference disagree on first paint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowCitations(localStorage.getItem("notekit.citations") !== "off");
   }, []);
 
@@ -767,6 +770,7 @@ function CourseReader({
   // Open where the reader left off, and nothing else. Re-runs when the course
   // changes so opening a different one does not inherit the last one's state.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setExpanded(new Set([activeSection]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
@@ -776,6 +780,7 @@ function CourseReader({
     const live = modules
       .filter((m) => m.status === "streaming" || m.status === "pending")
       .map((m) => m.index);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (live.length) setExpanded((prev) => new Set([...prev, ...live]));
   }, [modules]);
 
