@@ -304,6 +304,19 @@ It is off unless `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set, and
 failures inside tracing are swallowed. A missing observability backend must
 never stop someone studying.
 
+## Deploying
+
+The API ships as a container: CPU-only torch, model weights baked in at build
+time so nothing is downloaded on boot, single worker, non-root. It needs about
+800 MB of RAM with both models warm, which is the cost of keeping embeddings and
+reranking local.
+
+A shared password can be put in front of the whole API by setting
+`SITE_PASSWORD` — a lock on the front door, not authentication. Unset it and the
+gate does not exist, which is why none of it shows up in local development.
+
+Step by step, including what to set where and what it costs: **[DEPLOY.md](DEPLOY.md)**.
+
 ## Project layout
 
 ```
@@ -313,7 +326,9 @@ src/notekit/
   graph.py        LangGraph state machine with the broaden-and-retry branch
   retrieval.py    Hybrid dense + BM25, rank fusion, cross-encoder reranking
   ingest.py       Cold lane: fetch, parse, chunk, embed, store
-  adapters/       Source adapters — wikipedia.py, arxiv.py
+  router.py       Which sources a subject should be answered from
+  topics.py       When two names for a subject mean the same corpus
+  adapters/       Source adapters — wikipedia.py, arxiv.py, pubmed.py
   upload.py       User files into isolated per-user namespaces
   evaluation.py   Faithfulness and coverage judging, diagram claims
   calibration.py  Deriving the refusal threshold from labelled probes
@@ -322,6 +337,7 @@ src/notekit/
   style.py        Learning a writing style without carrying content
   llm.py          The only module that touches the Anthropic SDK
   tracing.py      Optional Langfuse spans
+  auth.py         The shared password gate for a deployed instance
   config.py       Every tunable choice in one place
 
 web/src/
@@ -330,6 +346,8 @@ web/src/
 
 scripts/dev.sh    Start the API reliably
 scripts/doctor.sh Diagnose and repair the environment
+Dockerfile        Production image — CPU-only torch, weights baked in
+DEPLOY.md         Putting it online, and what that costs
 evalsets/         Labelled probes for refusal calibration
 fixtures/         Frozen syllabi so evaluation runs are comparable
 ```
@@ -508,7 +526,7 @@ is why Wikipedia is fetched alongside it.
 | 4. Uploads, per-user namespaces, style matching | done |
 | 5. Open-domain routing across many sources | done |
 | 6. Web UI | working locally |
-| 7. Deployment | not started |
+| 7. Deployment | container and gate built and verified; not yet hosted |
 
 Built with Python, FastAPI, Postgres/pgvector, the Anthropic API, LangGraph,
 Langfuse, sentence-transformers, Next.js, React and TypeScript.

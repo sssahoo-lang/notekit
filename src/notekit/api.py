@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -18,10 +19,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import calibration, courses, db, explain, llm, retrieval, style, upload
+from . import auth, calibration, courses, db, explain, llm, retrieval, style, upload
 from .identity import normalize
 from .models import Module, Syllabus
 from .pipeline import arun_course_events, plan_syllabus
@@ -84,11 +85,61 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="NoteKit", version="0.1.0", lifespan=lifespan)
 
+
+class PasswordRequest(BaseModel):
+    password: str
+
+
+@app.middleware("http")
+async def site_password_gate(request, call_next):
+    """Refuse everything except the open paths until the password is presented.
+
+    Only active when SITE_PASSWORD is set, so local development is untouched.
+    """
+    if not auth.enabled() or request.method == "OPTIONS":
+        return await call_next(request)
+
+    path = request.url.path
+    if path in auth.OPEN_PATHS or not path.startswith("/api/"):
+        return await call_next(request)
+
+    if not auth.check_token(request.headers.get(auth.HEADER)):
+        return JSONResponse(
+            {"detail": "This instance is password protected."}, status_code=401
+        )
+    return await call_next(request)
+
+
+@app.post("/api/auth")
+def site_login(request: PasswordRequest) -> dict:
+    """Exchange the shared password for the access token."""
+    if not auth.enabled():
+        return {"token": "", "required": False}
+    if not auth.check_password(request.password):
+        raise HTTPException(401, "Incorrect password.")
+    return {"token": auth.token_for(request.password), "required": True}
+
+
+@app.get("/api/auth")
+def site_auth_required() -> dict:
+    """Whether this instance is gated — lets the UI decide to show a prompt."""
+    return {"required": auth.enabled()}
+
 # The Next.js dev server runs on 3000. Deployment will need the real origin
 # added here rather than a wildcard.
+# Deployment sets ALLOWED_ORIGINS to the real frontend URL; localhost stays so
+# a local UI can talk to a deployed API while debugging.
+_origins = [
+    o.strip()
+    for o in os.environ.get(
+        "ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -26,17 +26,120 @@ async function readError(res: Response): Promise<string> {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Site gate
+ *
+ * The deployed instance sits behind one shared password (see notekit/auth.py).
+ * The server hands back a token derived from that password; every subsequent
+ * request carries it. Locally SITE_PASSWORD is unset, the server reports the
+ * gate as off, and none of this does anything.
+ * ------------------------------------------------------------------------ */
+
+const TOKEN_KEY = "notekit.site-token";
+
+/** Thrown when the gate rejects us, so the UI can show the password screen
+ * instead of a generic error toast. */
+export class SiteAuthError extends Error {
+  constructor(message = "Enter the site password to continue.") {
+    super(message);
+    this.name = "SiteAuthError";
+  }
+}
+
+export function siteToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    // Private browsing can throw on access rather than return null.
+    return null;
+  }
+}
+
+function storeToken(token: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (token) window.localStorage.setItem(TOKEN_KEY, token);
+    else window.localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* nothing useful to do; the request will just be re-prompted */
+  }
+}
+
+export function clearSiteToken(): void {
+  storeToken(null);
+}
+
+/** Is this instance gated, and does the token we hold still work? */
+export async function gateStatus(): Promise<{
+  required: boolean;
+  unlocked: boolean;
+}> {
+  const res = await fetch(`${API_BASE}/api/auth`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readError(res));
+  const { required } = (await res.json()) as { required: boolean };
+  if (!required) return { required: false, unlocked: true };
+
+  const token = siteToken();
+  if (!token) return { required: true, unlocked: false };
+
+  // A stored token is not proof — the password may have been rotated since.
+  const probe = await fetch(`${API_BASE}/api/namespaces`, {
+    cache: "no-store",
+    headers: { "X-Site-Token": token },
+  });
+  if (probe.status === 401) {
+    clearSiteToken();
+    return { required: true, unlocked: false };
+  }
+  return { required: true, unlocked: true };
+}
+
+/** Exchange the password for a token. Throws SiteAuthError if it is wrong. */
+export async function unlock(password: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (res.status === 401) throw new SiteAuthError("That password is not right.");
+  if (!res.ok) throw new Error(await readError(res));
+  const { token } = (await res.json()) as { token: string };
+  storeToken(token);
+}
+
+/** Every call below goes through here, so the token is attached in exactly one
+ * place and a 401 always surfaces as SiteAuthError rather than as whatever the
+ * individual caller happened to do with a bad response. */
+async function request(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = siteToken();
+  let options = init;
+  if (token) {
+    const headers = new Headers(init.headers);
+    headers.set("X-Site-Token", token);
+    options = { ...init, headers };
+  }
+
+  const res = await request(`${path}`, options);
+  if (res.status === 401) {
+    // Stale or absent: drop it so the gate prompts again rather than looping.
+    clearSiteToken();
+    throw new SiteAuthError();
+  }
+  return res;
+}
+
 export async function getHealth(): Promise<{
   status: string;
   database: string;
 }> {
-  const res = await fetch(`${API_BASE}/api/health`, { cache: "no-store" });
+  const res = await request(`/api/health`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
 
 export async function getNamespaces(): Promise<NamespaceInfo[]> {
-  const res = await fetch(`${API_BASE}/api/namespaces`, { cache: "no-store" });
+  const res = await request(`/api/namespaces`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
@@ -45,7 +148,7 @@ export async function listCourses(
   user: string,
 ): Promise<SavedCourseSummary[]> {
   const q = encodeURIComponent(user.trim() || "anonymous");
-  const res = await fetch(`${API_BASE}/api/courses?user=${q}`, {
+  const res = await request(`/api/courses?user=${q}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -57,7 +160,7 @@ export async function claimCourses(
   user: string,
   aliases: string[],
 ): Promise<SavedCourseSummary[]> {
-  const res = await fetch(`${API_BASE}/api/courses/claim`, {
+  const res = await request(`/api/courses/claim`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user, aliases }),
@@ -71,7 +174,7 @@ export async function claimCourses(
 }
 
 export async function getCourse(id: number): Promise<SavedCourse> {
-  const res = await fetch(`${API_BASE}/api/courses/${id}`, {
+  const res = await request(`/api/courses/${id}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -85,7 +188,7 @@ export async function deleteCourse(
   const q = user?.trim()
     ? `?user=${encodeURIComponent(user.trim())}`
     : "";
-  const res = await fetch(`${API_BASE}/api/courses/${id}${q}`, {
+  const res = await request(`/api/courses/${id}${q}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -95,7 +198,7 @@ export async function saveProgress(
   id: number,
   progress: CourseProgress,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/courses/${id}/progress`, {
+  const res = await request(`/api/courses/${id}/progress`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -107,7 +210,7 @@ export async function saveProgress(
 }
 
 export async function cancelCourse(id: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/courses/${id}/cancel`, {
+  const res = await request(`/api/courses/${id}/cancel`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -121,7 +224,7 @@ export async function explainSelection(input: {
   question?: string;
   user?: string;
 }): Promise<{ answer: string; estimated_cost_usd: number }> {
-  const res = await fetch(`${API_BASE}/api/explain`, {
+  const res = await request(`/api/explain`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -137,7 +240,7 @@ export async function explainSelection(input: {
 }
 
 export async function getStyle(user: string): Promise<StyleProfile | null> {
-  const res = await fetch(`${API_BASE}/api/style/${encodeURIComponent(user)}`, {
+  const res = await request(`/api/style/${encodeURIComponent(user)}`, {
     cache: "no-store",
   });
   if (res.status === 404) return null;
@@ -149,7 +252,7 @@ export async function learnStyle(
   user: string,
   sample: string,
 ): Promise<StyleProfile> {
-  const res = await fetch(`${API_BASE}/api/style/learn`, {
+  const res = await request(`/api/style/learn`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user, sample }),
@@ -167,7 +270,7 @@ export async function uploadFiles(
   form.append("user", user);
   form.append("topic", topic);
   for (const file of files) form.append("files", file);
-  const res = await fetch(`${API_BASE}/api/upload`, {
+  const res = await request(`/api/upload`, {
     method: "POST",
     body: form,
   });
@@ -214,13 +317,13 @@ async function* readSseStream(
 
 /** Parse an SSE body from POST /api/course into typed events. */
 export async function* streamCourse(
-  request: CourseRequest,
+  input: CourseRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<CourseEvent> {
-  const res = await fetch(`${API_BASE}/api/course`, {
+  const res = await request(`/api/course`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify(request),
+    body: JSON.stringify(input),
     signal,
   });
 
@@ -233,7 +336,7 @@ export async function* resumeCourse(
   id: number,
   signal?: AbortSignal,
 ): AsyncGenerator<CourseEvent> {
-  const res = await fetch(`${API_BASE}/api/courses/${id}/resume`, {
+  const res = await request(`/api/courses/${id}/resume`, {
     method: "POST",
     headers: { Accept: "text/event-stream" },
     signal,

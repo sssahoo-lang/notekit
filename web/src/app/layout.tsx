@@ -3,6 +3,7 @@ import { DM_Sans, Fraunces, IBM_Plex_Mono, Source_Serif_4 } from "next/font/goog
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
+import { SiteGate } from "@/components/site-gate";
 import { CourseNavProvider } from "@/lib/course-nav";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -42,16 +43,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${sans.variable} ${heading.variable} ${notes.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <CourseNavProvider>
-          {/* Sidebar on wide screens; the top header takes over below lg. */}
-          <div className="flex min-h-screen">
-            <AppSidebar />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <SiteHeader />
-              <main className="flex flex-1 flex-col">{children}</main>
+        {/* Wraps the shell, not just the page, so a locked instance shows no
+            sidebar or navigation to click at. Renders children unchanged when
+            the gate is off, which is always the case locally. */}
+        <SiteGate>
+          <CourseNavProvider>
+            {/* Sidebar on wide screens; the top header takes over below lg. */}
+            <div className="flex min-h-screen">
+              <AppSidebar />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <SiteHeader />
+                <main className="flex flex-1 flex-col">{children}</main>
+              </div>
             </div>
-          </div>
-        </CourseNavProvider>
+          </CourseNavProvider>
+        </SiteGate>
         <Toaster position="bottom-right" />
       </body>
     </html>
