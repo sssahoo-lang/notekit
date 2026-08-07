@@ -20,6 +20,8 @@ The refusal and the grounding are not promises — they are measured. **95% of
 generated claims are verified against their retrieved context, and 100% of
 deliberately out-of-scope questions are correctly refused.**
 
+[![NoteKit screenshots — library, cited reader, collapsible sections, a diagram treated as a claim, practice questions, and style matching](docs/screenshots.png)](docs/screenshots.png)
+
 ### Contents
 
 [What it does](#what-it-does) ·
