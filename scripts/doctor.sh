@@ -7,6 +7,30 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 fail=0
 
+# The durable fix. uv keeps re-setting macOS UF_HIDDEN on the editable .pth,
+# and Python 3.11+ silently skips hidden .pth files — link-mode=copy reduces it
+# but does not stop it. The hidden-file check applies only to .pth files, so a
+# sitecustomize.py is honoured either way.
+write_sitecustomize() {
+  local sp
+  sp=$(.venv/bin/python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null) || return 0
+  [ -d "$sp" ] || return 0
+  cat > "$sp/sitecustomize.py" <<PYEOF_INNER
+"""Keeps this project importable when the editable .pth is flagged hidden.
+
+Written by scripts/doctor.sh. Safe to delete; it is recreated.
+"""
+
+import os
+import sys
+
+_src = "$ROOT/src"
+if os.path.isdir(_src) and _src not in sys.path:
+    sys.path.append(_src)
+PYEOF_INNER
+}
+
+
 check() { printf '  %-34s' "$1"; }
 ok()    { echo "ok"; }
 bad()   { echo "FAILED — $1"; fail=1; }
@@ -21,6 +45,9 @@ check "virtualenv"
 # Python 3.11+ silently skips hidden .pth files. The file is present, valid and
 # ignored, which is why it looked like corruption. One chflags fixes it; a venv
 # rebuild also "worked" only because it wrote a fresh unflagged file.
+check "import shim"
+write_sitecustomize && ok
+
 check "pth not hidden"
 PTH=.venv/lib/python3.11/site-packages/_editable_impl_notekit.pth
 if [ -f "$PTH" ] && ls -lO "$PTH" 2>/dev/null | grep -q hidden; then

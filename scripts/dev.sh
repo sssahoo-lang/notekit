@@ -27,6 +27,8 @@ echo "→ checking the environment"
 # minutes ago. Clearing the flag is the fix; PYTHONPATH below is the backstop.
 PTH=.venv/lib/python3.11/site-packages/_editable_impl_notekit.pth
 [ -f "$PTH" ] && chflags nohidden "$PTH" 2>/dev/null || true
+# Durable backstop: see scripts/doctor.sh for why a .py rather than a .pth.
+"$ROOT/scripts/doctor.sh" >/dev/null 2>&1 || true
 if [ ! -d .venv ]; then
   echo "  no .venv — creating"
   uv sync

@@ -8,6 +8,7 @@ actually has searchable chunks.
 from __future__ import annotations
 
 from . import config, db, embedding
+from . import router
 from .adapters import DEFAULT_ADAPTERS, REGISTRY
 
 
@@ -29,7 +30,16 @@ def ingest_topic(
     thin, which shows up later as low coverage.
     """
     cfg = cfg or config.EMBEDDING
-    adapter_names = adapter_names or DEFAULT_ADAPTERS
+    if adapter_names is None:
+        # No explicit choice: pick sources by subject rather than always
+        # fetching the same two. arXiv has nothing on the French Revolution.
+        try:
+            adapter_names, routing = router.sources_for(slug.replace("-", " "))
+            print(f"Sources for '{slug}': {routing.domain} -> {', '.join(adapter_names)}")
+        except Exception as exc:  # noqa: BLE001
+            # Routing is an optimisation; failing it must not stop ingestion.
+            print(f"  ! routing failed ({exc}); using defaults")
+            adapter_names = DEFAULT_ADAPTERS
     queries = [query] if isinstance(query, str) else list(dict.fromkeys(query))
     raw_goal = query if isinstance(query, str) else " | ".join(queries)
 

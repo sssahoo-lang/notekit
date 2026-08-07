@@ -11,7 +11,7 @@ from rich.table import Table
 
 from . import (
     calibration, config, db, evaluation, graph, ingest, llm, retrieval, style,
-    sweep, upload,
+    sweep, topics, upload,
 )
 from .adapters import DEFAULT_ADAPTERS
 from .models import Syllabus
@@ -533,6 +533,53 @@ def sweep_cmd(
     for r in results:
         if r.skipped:
             console.print(f"[dim]{r.name}: {r.skipped}[/]")
+
+
+@app.command("topics")
+def topics_cmd(
+    check: str = typer.Option(
+        None, "--check", help="Two topic names, comma separated, to compare"
+    ),
+) -> None:
+    """Show which corpus each topic resolves to. Needs no API key."""
+    if check:
+        parts = [p.strip() for p in check.split(",", 1)]
+        if len(parts) != 2:
+            console.print("[red]Give two names: --check 'a, b'[/]")
+            raise typer.Exit(1)
+        score = topics.similarity(*parts)
+        verdict = (
+            "same corpus" if score >= topics.MERGE_THRESHOLD else "kept separate"
+        )
+        console.print(
+            f"{parts[0]} vs {parts[1]}: [bold]{score:.3f}[/] "
+            f"(threshold {topics.MERGE_THRESHOLD}) — {verdict}"
+        )
+        return
+
+    filled = topics.backfill_embeddings()
+    if filled:
+        console.print(f"[dim]backfilled {filled} topic embedding(s)[/]")
+
+    rows = topics.known()
+    if not rows:
+        console.print("[yellow]No topics indexed yet.[/]")
+        return
+
+    table = Table(title="Topics and the corpus they share", title_style="dim")
+    for column in ("topic", "corpus", "chunks"):
+        table.add_column(column)
+    for r in rows:
+        alias = r["slug"] != r["namespace"]
+        table.add_row(
+            f"{'└ ' if alias else ''}{r['slug']}",
+            "[dim]— same[/]" if alias else r["namespace"],
+            "" if alias else str(r["chunks"]),
+        )
+    console.print(table)
+    console.print(
+        "[dim]Indented rows are alternate phrasings sharing the corpus above.[/]"
+    )
 
 
 @app.command("stats")

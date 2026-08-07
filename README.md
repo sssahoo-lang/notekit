@@ -112,6 +112,36 @@ rank fusion** — fusing on raw score would let whichever list has larger number
 win by default — then reranked by a cross-encoder, which tightens the context
 and shrinks the generation prompt at the same time.
 
+### Routing and topic identity
+
+Fetching every source for every topic wastes round trips and pollutes the
+corpus: arXiv has nothing useful on the French Revolution, PubMed nothing on
+Baroque music. A router classifies the subject once per topic and picks
+adapters from that.
+
+| Domain | Sources |
+|---|---|
+| computing · physical-science · social-science | Wikipedia + arXiv |
+| biomedical | Wikipedia + PubMed |
+| humanities · general | Wikipedia |
+
+Wikipedia is in every row deliberately — it is the only source covering
+foundations across every domain, and arXiv alone cannot teach basics because it
+indexes the research frontier rather than pedagogy.
+
+Topic identity is resolved by embedding, not string matching, because the
+failure is semantic: "RL" and "reinforcement learning" share no characters,
+while "linear algebra" and "linear regression" share most of them. Measured on
+the local embedding model, restatements of one subject score 0.888–0.920 and
+distinct subjects top out at 0.798, so the merge threshold sits at 0.86 with
+clear air either side. Abbreviations are handled upstream by the planner, which
+expands "RL" to "reinforcement-learning" before the slug is ever compared.
+
+```bash
+uv run notekit topics                                       # what shares a corpus
+uv run notekit topics --check "linear algebra, linear regression"
+```
+
 ### The generation contract
 
 Four rules, in priority order, given to the model with the retrieved passages:
@@ -401,10 +431,13 @@ Python 3.11+ **silently skips hidden `.pth` files**. So the editable install's
 path file was there and correct and simply ignored, with nothing logged. `ls
 -lO` shows it: `hidden`.
 
-`link-mode = "copy"` in `[tool.uv]` fixes it — copying does not carry the flag.
-Verified across repeated runs where cloning failed on the second or third.
-`scripts/dev.sh` also sets `PYTHONPATH=src` as a backstop, and
-`scripts/doctor.sh` clears the flag if it ever reappears.
+`link-mode = "copy"` in `[tool.uv]` reduces how often it happens but does **not**
+stop it — the flag comes back on later runs. The durable fix is a
+`sitecustomize.py` in site-packages adding `src` to `sys.path`: the hidden-file
+check applies only to `.pth` files, so a `.py` is honoured either way. Verified
+over eight consecutive runs with the `.pth` still flagged hidden.
+`scripts/doctor.sh` writes it, `scripts/dev.sh` calls doctor first, and
+`PYTHONPATH=src` remains as a third backstop.
 
 ## Reading a 7,000-word course
 
@@ -473,7 +506,7 @@ is why Wikipedia is fetched alongside it.
 | 2. Evaluation — faithfulness, coverage, calibration, tracing | done |
 | 3. Practice questions | done |
 | 4. Uploads, per-user namespaces, style matching | done |
-| 5. Open-domain routing across many sources | not started |
+| 5. Open-domain routing across many sources | done |
 | 6. Web UI | working locally |
 | 7. Deployment | not started |
 

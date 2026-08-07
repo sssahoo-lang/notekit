@@ -26,11 +26,13 @@ class SourceAdapter(Protocol):
 
 
 from .arxiv import ArxivAdapter  # noqa: E402
+from .pubmed import PubMedAdapter  # noqa: E402
 from .wikipedia import WikipediaAdapter  # noqa: E402
 
 REGISTRY: dict[str, SourceAdapter] = {
     "wikipedia": WikipediaAdapter(),
     "arxiv": ArxivAdapter(),
+    "pubmed": PubMedAdapter(),
 }
 
 # Wikipedia first: foundational modules fail without encyclopaedic material,

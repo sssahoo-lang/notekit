@@ -15,7 +15,7 @@ import re
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 
-from . import config, embedding, ingest, llm, retrieval
+from . import config, embedding, ingest, llm, retrieval, topics
 from .models import Chunk, Module, ModuleNotes, Quiz, QuizQuestion, Syllabus
 from .style import StyleProfile
 
@@ -500,7 +500,12 @@ async def arun_course_events(
 
     if namespace:
         skip_ingest = True
-    namespace = namespace or syllabus.topic_slug
+    else:
+        # Differently-phrased goals about one subject should share an index
+        # rather than each fetching their own copy of the same sources.
+        namespace = topics.resolve(
+            syllabus.topic_slug, label=syllabus.title or syllabus.summary
+        ).namespace
 
     yield {
         "type": "syllabus",
@@ -633,7 +638,12 @@ def run_course(
     # defeat the point, so it is skipped.
     if namespace:
         skip_ingest = True
-    namespace = namespace or syllabus.topic_slug
+    else:
+        # Differently-phrased goals about one subject should share an index
+        # rather than each fetching their own copy of the same sources.
+        namespace = topics.resolve(
+            syllabus.topic_slug, label=syllabus.title or syllabus.summary
+        ).namespace
 
     if not skip_ingest:
         summary = ingest.ingest_topic(
