@@ -25,6 +25,14 @@ dependencies = [
 [project.scripts]
 notekit = "notekit.cli:app"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.uv]
 package = true
 # uv clones installed files from its cache, and on macOS the clone inherits

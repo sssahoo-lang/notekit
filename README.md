@@ -8,6 +8,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js_16-000000?logo=nextdotjs&logoColor=white)
 ![Faithfulness](https://img.shields.io/badge/faithfulness-95.3%25-15803D)
 ![Refusal accuracy](https://img.shields.io/badge/refusal_accuracy-100%25-15803D)
+![Tests](https://img.shields.io/badge/tests-81_passing-15803D)
 
 Most AI study tools always give you an answer. You cannot tell which sentences
 came from a real source and which the model invented, and they never admit when
@@ -312,6 +313,25 @@ than an HTTP status, because the headers are long gone by then.
 
 Generation continues if the client disconnects; `POST /api/courses/{id}/cancel`
 stops it explicitly.
+
+### Tests
+
+```bash
+uv run pytest
+```
+
+81 tests, no API key and no database — every module here is either pure logic
+or has its one external dependency (the LLM call, Postgres, the embedding
+model) faked at the boundary, so the whole suite runs offline in under a
+second. Covers topic-identity merging at the 0.86 threshold (exact match,
+merge, new topic, and the embedding backfill path), the domain router's
+source table, the shared-password gate (including a password rotation
+invalidating the old token), the quiz text parser, Mermaid-to-claim
+extraction, and the LangGraph broaden-and-retry decision — including the
+guard that a course built from uploaded material never widens to the open
+web. What it does not cover: retrieval, generation, and the API layer itself,
+which need a running Postgres and a real API key and are exercised instead by
+`notekit eval` and `notekit sweep` against fixed syllabi.
 
 ## Evaluation and tracing
 
