@@ -184,6 +184,10 @@ function applyCourseEvent(
 export function CourseWorkspace() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [goal, setGoal] = useState("");
+  // The planner writes a clean `title` precisely so a reader never sees
+  // their own typos back. `goal` is the course-form input and cannot serve
+  // both jobs.
+  const [courseTitle, setCourseTitle] = useState("");
   const [sourceMode, setSourceMode] = useState<string>(AUTO_SOURCE);
   const [uploadNs, setUploadNs] = useState<string | null>(null);
   const [sources, setSources] = useState<NamespaceInfo[]>([]);
@@ -390,6 +394,7 @@ export function CourseWorkspace() {
 
       setActiveCourseId(course.id);
       setGoal(course.goal);
+      setCourseTitle(course.title || course.goal);
       setSummary(course.summary);
       setModules(mapped);
       setModulesRead(Array.isArray(read) ? read : []);
@@ -656,6 +661,7 @@ export function CourseWorkspace() {
           activeSection={activeSection}
           courseId={activeCourseId}
           userId={userId}
+          courseTitle={courseTitle}
           titleRef={titleRef}
           onBack={resetView}
           onCancel={() => void stopGeneration()}
@@ -713,6 +719,7 @@ function CourseReader({
   activeSection,
   courseId,
   userId,
+  courseTitle,
   titleRef,
   onBack,
   onCancel,
@@ -738,6 +745,7 @@ function CourseReader({
   activeSection: number;
   courseId: number | null;
   userId: string;
+  courseTitle: string;
   titleRef: React.RefObject<HTMLHeadingElement | null>;
   onBack: () => void;
   onCancel: () => void;
@@ -822,7 +830,7 @@ function CourseReader({
         tabIndex={-1}
         className="mt-4 font-heading text-2xl tracking-tight text-ink outline-none sm:text-3xl"
       >
-        {goal}
+        {courseTitle || goal}
       </h1>
       {summary ? (
         <p className="mt-2 max-w-prose text-muted-foreground">{summary}</p>
