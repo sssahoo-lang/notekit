@@ -102,6 +102,55 @@
   --sidebar-ring: oklch(0.5 0.06 205);
 }
 
+/* Dark mode.
+   Derived from the light tokens by moving lightness while holding hue and
+   chroma, so the brand stays recognisably itself rather than becoming a
+   different, greyer product at night. No pure black: the base keeps the same
+   blue-ink hue the light theme is built on.
+
+   This matters more here than in most apps. A study course runs to seven
+   thousand words, and people read at night. */
+.dark {
+  --background: oklch(0.178 0.018 240);
+  --foreground: oklch(0.94 0.012 220);
+  --card: oklch(0.215 0.02 240);
+  --card-foreground: oklch(0.94 0.012 220);
+  --popover: oklch(0.235 0.021 240);
+  --popover-foreground: oklch(0.94 0.012 220);
+  /* Lifted well above the light-mode primary: the same teal at 0.4 lightness
+     is unreadable on a dark ground. */
+  --primary: oklch(0.74 0.09 196);
+  --primary-foreground: oklch(0.18 0.03 205);
+  --secondary: oklch(0.272 0.022 235);
+  --secondary-foreground: oklch(0.92 0.014 220);
+  --muted: oklch(0.252 0.02 238);
+  --muted-foreground: oklch(0.735 0.021 225);
+  --accent: oklch(0.3 0.032 200);
+  --accent-foreground: oklch(0.93 0.02 200);
+  --destructive: oklch(0.7 0.16 25);
+  --border: oklch(0.325 0.02 235);
+  --input: oklch(0.305 0.02 235);
+  --ring: oklch(0.66 0.08 200);
+  /* ink and paper inverate: ink is heading text, paper is a reading surface. */
+  --ink: oklch(0.955 0.01 230);
+  --paper: oklch(0.208 0.016 240);
+  --cite: oklch(0.79 0.1 75);
+  --cite-foreground: oklch(0.88 0.06 75);
+  --chart-1: oklch(0.7 0.09 200);
+  --chart-2: oklch(0.78 0.1 72);
+  --chart-3: oklch(0.66 0.05 240);
+  --chart-4: oklch(0.74 0.05 180);
+  --chart-5: oklch(0.6 0.04 230);
+  --sidebar: oklch(0.198 0.018 240);
+  --sidebar-foreground: oklch(0.93 0.012 220);
+  --sidebar-primary: oklch(0.74 0.09 196);
+  --sidebar-primary-foreground: oklch(0.18 0.03 205);
+  --sidebar-accent: oklch(0.272 0.022 235);
+  --sidebar-accent-foreground: oklch(0.92 0.014 220);
+  --sidebar-border: oklch(0.31 0.02 235);
+  --sidebar-ring: oklch(0.66 0.08 200);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -113,6 +162,14 @@
       radial-gradient(ellipse 55% 45% at 100% -5%, oklch(0.93 0.03 85 / 0.28), transparent),
       linear-gradient(180deg, transparent 0%, oklch(0.97 0.01 220) 100%);
     background-attachment: fixed;
+  }
+  /* The same wash, at dark-mode luminance. Reusing the light one would sit a
+     bright haze over the top of every page. */
+  .dark body {
+    background-image:
+      radial-gradient(ellipse 90% 55% at 8% -15%, oklch(0.32 0.04 195 / 0.55), transparent),
+      radial-gradient(ellipse 55% 45% at 100% -5%, oklch(0.3 0.03 85 / 0.35), transparent),
+      linear-gradient(180deg, transparent 0%, oklch(0.155 0.015 240) 100%);
   }
   html {
     @apply font-sans;

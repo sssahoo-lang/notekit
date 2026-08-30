@@ -108,7 +108,14 @@ export function CourseMap({ modules, activeSection, onSelectSection }: Props) {
   return (
     <section
       aria-label="Course map"
-      className="overflow-hidden rounded-2xl bg-[#15212A] p-6 sm:p-8"
+      className={cn(
+        "overflow-hidden rounded-2xl p-6 sm:p-8",
+        // In light mode this is the page's one dark surface, and the contrast
+        // is the point. In dark mode the same fill would sit almost exactly on
+        // the page background, so the panel lifts slightly and takes a border
+        // to stay a distinct object rather than a tonal smudge.
+        "bg-[#15212A] dark:bg-[oklch(0.245_0.021_240)] dark:ring-1 dark:ring-white/10",
+      )}
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>

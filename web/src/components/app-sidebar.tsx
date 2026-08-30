@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -157,6 +158,9 @@ export function AppSidebar() {
       </div>
 
       <div className="border-t border-border/70 p-3">
+        <div className="mb-1 flex justify-end">
+          <ThemeToggle className="text-muted-foreground hover:text-foreground" />
+        </div>
         {editing ? (
           <div className="flex items-center gap-1.5">
             <Label htmlFor="sidebar-name" className="sr-only">
@@ -194,7 +198,7 @@ export function AppSidebar() {
               aria-hidden="true"
               className={cn(
                 "size-1.5 shrink-0 rounded-full",
-                ok === true && "bg-teal-700",
+                ok === true && "bg-primary",
                 ok === false && "bg-destructive",
                 ok === null && "animate-pulse bg-muted-foreground",
               )}

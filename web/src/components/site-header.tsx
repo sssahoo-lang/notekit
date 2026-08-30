@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -123,11 +124,14 @@ export function SiteHeader() {
             </Button>
           )}
 
+          <ThemeToggle className="ml-1 text-muted-foreground hover:text-foreground" />
+
           <span
             role="status"
             className={cn(
               "ml-1 hidden items-center gap-1.5 rounded-md border px-2 py-0.5 text-[0.7rem] sm:inline-flex",
-              ok === true && "border-teal-800/20 bg-teal-50/80 text-teal-900",
+              ok === true &&
+                "border-primary/25 bg-primary/10 text-primary",
               ok === false &&
                 "border-destructive/40 bg-destructive/5 text-destructive",
               ok === null && "border-border text-muted-foreground",
@@ -137,7 +141,7 @@ export function SiteHeader() {
               aria-hidden="true"
               className={cn(
                 "size-1.5 rounded-full",
-                ok === true && "bg-teal-700",
+                ok === true && "bg-primary",
                 ok === false && "bg-destructive",
                 ok === null && "animate-pulse bg-muted-foreground",
               )}
