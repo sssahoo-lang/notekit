@@ -83,7 +83,7 @@ export async function gateStatus(): Promise<{
   const token = siteToken();
   if (!token) return { required: true, unlocked: false };
 
-  // A stored token is not proof — the password may have been rotated since.
+  // A stored token is not proof. The password may have been rotated since.
   const probe = await fetch(`${API_BASE}/api/namespaces`, {
     cache: "no-store",
     headers: { "X-Site-Token": token },

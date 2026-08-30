@@ -15,7 +15,7 @@ import { SiteAuthError, gateStatus, unlock } from "@/lib/api";
  * exists so the public URL is not an open upload form pointed at a paid API
  * key.
  *
- * Three states rather than two. "Checking" renders nothing at all — flashing a
+ * Three states rather than two. "Checking" renders nothing at all: flashing a
  * password box at someone running locally, where the gate is off, would be a
  * worse bug than a moment of blank screen. Only a server that says it is gated
  * ever produces a prompt.

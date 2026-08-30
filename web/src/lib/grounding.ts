@@ -5,7 +5,7 @@
  * section whose every claim comes from one document. That section is fully
  * faithful and still fragile: it inherits whatever that single source got
  * wrong, with nothing to corroborate it. Nothing in the app surfaces that
- * today — the number this measures is breadth, not correctness.
+ * today. The number this measures is breadth, not correctness.
  *
  * Counted from the citation markers in the prose rather than from the
  * retrieved chunk list, because retrieval hands the model far more passages
@@ -32,7 +32,7 @@ export type SectionGrounding = {
   sources: number;
   /** Citation markers that resolve to a passage we hold. */
   citations: number;
-  /** Many claims, few documents — worth a second look. */
+  /** Many claims, few documents. Worth a second look. */
   narrow: boolean;
   refused: boolean;
   /** Distinct document titles, most-cited first. */

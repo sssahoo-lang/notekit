@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
  *
  * Deliberately the only dark surface in the app. Everything else sits within a
  * few points of the same pale tone, so a reader has nothing to anchor on; this
- * panel is a different kind of thing — analysis rather than reading — and the
+ * panel is a different kind of thing, analysis rather than reading, and the
  * tonal shift says so without a heading having to.
  *
  * Bars are sized by distinct documents, not by citation count. A section can

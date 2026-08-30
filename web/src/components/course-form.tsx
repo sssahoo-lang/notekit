@@ -17,7 +17,7 @@ import type { NamespaceInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Starting a course — the one thing everyone comes here to do.
+ * Starting a course: the one thing everyone comes here to do.
  *
  * The previous version laid every control out flat, so the thing that decides
  * the whole course looked exactly as important as a checkbox, and four separate

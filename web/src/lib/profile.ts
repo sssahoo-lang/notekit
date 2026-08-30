@@ -3,7 +3,7 @@
  *
  * The browser holds one stable id and an optional display name; the id is the
  * only thing sent to the API. Cleared localStorage used to mint a brand-new
- * `reader-…` id and hide every saved course — we keep a durable list of ids
+ * `reader-…` id and hide every saved course, so we keep a durable list of ids
  * this browser has ever used so those courses can be claimed back.
  */
 

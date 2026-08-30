@@ -34,7 +34,7 @@ function toParagraphs(text: string): string[] {
  * hundred words they were interrupting the line more often than a comma. Three
  * things keep them checkable without taxing the reading: they are numbered per
  * section rather than by raw chunk id, drawn as superscripts rather than filled
- * chips, and consecutive markers are merged — the model frequently emits
+ * chips, and consecutive markers are merged. The model frequently emits
  * [c1291][c1327] for one claim, which rendered as two separate blocks.
  */
 export function CitedText({

@@ -25,7 +25,7 @@ export function UploadWorkspace() {
     // window is undefined, so the server render and the client's first paint
     // agree. Reading it eagerly (e.g. a useState lazy initializer, which also
     // runs during hydration) would make that first client render disagree
-    // with the server's — a hydration mismatch, not a fix.
+    // with the server's. That is a hydration mismatch, not a fix.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setProfile(getProfile());
   }, []);

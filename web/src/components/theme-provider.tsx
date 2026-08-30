@@ -7,7 +7,7 @@ import { ThemeProvider as NextThemes } from "next-themes";
  * Component, so the provider lives here rather than in layout.tsx.
  *
  * `attribute="class"` because the Tailwind v4 dark variant in globals.css is
- * declared as `&:is(.dark *)` — it looks for a class, not a data attribute.
+ * declared as `&:is(.dark *)`, so it looks for a class, not a data attribute.
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (

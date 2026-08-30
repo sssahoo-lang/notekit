@@ -215,7 +215,8 @@ export function CourseWorkspace() {
     paragraph: number;
   } | null>(null);
   // Where reading currently is, saved with the bookmark rather than on every
-  // scroll — a PATCH per paragraph would be a request every few seconds.
+  // scroll, because a PATCH per paragraph would be a request every few
+  // seconds.
   const paragraphRef = useRef(0);
   const paragraphSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeSection, setActiveSection] = useState(0);
@@ -344,7 +345,8 @@ export function CourseWorkspace() {
   );
 
   function resetView() {
-    // Leaving the reader does not cancel generation — it keeps going server-side.
+    // Leaving the reader does not cancel generation. It keeps going
+    // server-side.
     abortRef.current?.abort();
     abortRef.current = null;
     setActiveCourseId(null);
@@ -497,7 +499,8 @@ export function CourseWorkspace() {
       setPhase((p) => (p === "error" ? p : "done"));
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
-      // Resume attach can 404/fail if job already finished — refresh instead.
+      // Resume attach can 404/fail if the job already finished. Refresh
+      // instead.
       try {
         const course = await getCourse(id);
         setModules(mapSavedModules(course));

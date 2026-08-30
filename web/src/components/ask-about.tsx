@@ -65,7 +65,7 @@ type Props = {
 };
 
 /**
- * "I don't follow this" — ask about a highlighted sentence.
+ * "I don't follow this": ask about a highlighted sentence.
  *
  * The answer comes from the same passages the section was written from, so
  * asking for a simpler explanation cannot pull in claims the sources never

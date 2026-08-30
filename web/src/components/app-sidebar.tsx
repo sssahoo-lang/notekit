@@ -32,7 +32,7 @@ function readCount(c: SavedCourseSummary): number {
  *
  * The app was one centred column about 800px wide, which on a 1600px monitor
  * used half the screen and read as a phone app. Width is better spent on
- * structure than on longer lines — prose still wants roughly 68 characters, so
+ * structure than on longer lines. Prose still wants roughly 68 characters, so
  * the reading column stays narrow and the space around it carries the things
  * you navigate by.
  */

@@ -52,7 +52,7 @@ export function CourseNavProvider({ children }: { children: ReactNode }) {
 
 const noop = () => undefined;
 
-// Module-level so it is a stable reference and involves no hook call — a hook
+// Module-level so it is a stable reference and involves no hook call. A hook
 // inside this branch would break the rules of hooks.
 const DETACHED: CourseNav = {
   requestedCourseId: null,

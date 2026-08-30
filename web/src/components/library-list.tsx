@@ -21,7 +21,7 @@ const BADGE_LABEL: Record<LibraryBadge, string> = {
 };
 
 /**
- * Past courses this reader has built — including incomplete ones.
+ * Past courses this reader has built, including incomplete ones.
  */
 export function LibraryList({
   courses,

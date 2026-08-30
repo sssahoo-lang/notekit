@@ -11,7 +11,8 @@ import { scrollToSection } from "@/lib/go-to-section";
  * A course runs to about twenty screens of scrolling. Before this, every
  * navigation control lived at the top of the page and scrolled away, so a
  * reader four screens down had no way to tell which section they were in, jump
- * to another, or get back — the classic orientation failure in long documents.
+ * to another, or get back. That is the classic orientation failure in long
+ * documents.
  *
  * Desktop gets a persistent rail of section titles. Narrow screens, where a
  * rail would eat the reading column, get a compact sticky bar naming the

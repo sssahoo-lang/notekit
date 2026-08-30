@@ -30,7 +30,7 @@ export function ExcalidrawDiagram({ definition, className }: Props) {
   useEffect(() => {
     let cancelled = false;
     // This effect re-runs whenever `definition` changes. Resetting state
-    // synchronously here — before the async parse below — is what stops the
+    // synchronously here, before the async parse below, is what stops the
     // previous diagram from staying on screen while the next one loads.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBusy(true);
