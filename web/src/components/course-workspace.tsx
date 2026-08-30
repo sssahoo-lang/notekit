@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ContinueCard } from "@/components/continue-card";
+import { CourseMap } from "@/components/course-map";
+import { scrollToSection } from "@/lib/go-to-section";
 import { CourseForm } from "@/components/course-form";
 import { LibraryList } from "@/components/library-list";
 import { ModulePanel } from "@/components/module-panel";
@@ -207,6 +209,7 @@ export function CourseWorkspace() {
     "generating" | "complete" | "partial" | null
   >(null);
   const [modulesRead, setModulesRead] = useState<number[]>([]);
+  const [showMap, setShowMap] = useState(false);
   const [restore, setRestore] = useState<{
     section: number;
     paragraph: number;
@@ -662,6 +665,8 @@ export function CourseWorkspace() {
           courseId={activeCourseId}
           userId={userId}
           courseTitle={courseTitle}
+          showMap={showMap}
+          onToggleMap={() => setShowMap((prev) => !prev)}
           titleRef={titleRef}
           onBack={resetView}
           onCancel={() => void stopGeneration()}
@@ -720,6 +725,8 @@ function CourseReader({
   courseId,
   userId,
   courseTitle,
+  showMap,
+  onToggleMap,
   titleRef,
   onBack,
   onCancel,
@@ -746,6 +753,8 @@ function CourseReader({
   courseId: number | null;
   userId: string;
   courseTitle: string;
+  showMap: boolean;
+  onToggleMap: () => void;
   titleRef: React.RefObject<HTMLHeadingElement | null>;
   onBack: () => void;
   onCancel: () => void;
@@ -876,6 +885,16 @@ function CourseReader({
                 variant="ghost"
                 size="sm"
                 className="text-muted-foreground hover:text-foreground"
+                onClick={onToggleMap}
+                aria-pressed={showMap}
+              >
+                {showMap ? "Hide map" : "Course map"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={toggleCitations}
                 aria-pressed={!showCitations}
               >
@@ -896,6 +915,21 @@ function CourseReader({
               >
                 {allOpen ? "Collapse all" : "Expand all"}
               </Button>
+            </div>
+          ) : null}
+
+          {showMap ? (
+            <div className="rise-in mb-8">
+              <CourseMap
+                modules={modules}
+                activeSection={activeSection}
+                onSelectSection={(index) => {
+                  onSelectSection(index);
+                  onBookmark(index, 0);
+                  setExpanded((prev) => new Set([...prev, index]));
+                  scrollToSection(index);
+                }}
+              />
             </div>
           ) : null}
 

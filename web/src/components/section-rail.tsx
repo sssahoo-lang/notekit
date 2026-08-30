@@ -3,6 +3,7 @@
 import { ProgressBar } from "@/components/progress-bar";
 import type { ModuleState } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { scrollToSection } from "@/lib/go-to-section";
 
 /**
  * Where you are in a long course, and how to get somewhere else.
@@ -27,22 +28,7 @@ type Props = {
 
 function goTo(index: number, onSelect: (i: number) => void) {
   onSelect(index);
-  const target = document.getElementById(`section-${index}`);
-  if (!target) return;
-  // scrollIntoView ignores prefers-reduced-motion, so a smooth jump across
-  // twenty screens would fly past regardless of the setting. Honour it.
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  target.scrollIntoView({
-    behavior: reduced ? "auto" : "smooth",
-    block: "start",
-  });
-  // Move focus so keyboard users follow the jump rather than staying put and
-  // tabbing from wherever they were.
-  const heading = target.querySelector("h2");
-  if (heading instanceof HTMLElement) {
-    heading.setAttribute("tabindex", "-1");
-    heading.focus({ preventScroll: true });
-  }
+  scrollToSection(index);
 }
 
 export function SectionRail({
