@@ -636,6 +636,12 @@ is why Wikipedia is fetched alongside it.
 | 5. Open-domain routing across many sources | done |
 | 6. Web UI | working locally |
 | 7. Deployment | container and gate built and verified; not yet hosted |
+| 8. Markdown export — courses as linked notes | done |
+
+Beyond the milestones: 116 unit tests cover the logic layer, and every
+citation the export writes is verified to resolve to a real source passage.
+The export's Obsidian-specific rendering — block-reference jumps, collapsed
+callouts — has not yet been confirmed inside Obsidian itself.
 
 Built with Python, FastAPI, Postgres/pgvector, the Anthropic API, LangGraph,
 Langfuse, sentence-transformers, Next.js, React and TypeScript.
