@@ -37,7 +37,7 @@ export function StyleWorkspace() {
     e.preventDefault();
     if (sample.trim().length < 400) {
       toast.error(
-        "Paste a bit more — a few paragraphs, so there's enough to go on",
+        "Paste a bit more. A few paragraphs, so there's enough to go on",
       );
       return;
     }
@@ -59,16 +59,16 @@ export function StyleWorkspace() {
         Writing style
       </h1>
       <p className="mt-2 max-w-prose text-muted-foreground">
-        Paste something you wrote and NoteKit learns how you write — sentence
+        Paste something you wrote and NoteKit learns how you write: sentence
         length, formality, analogies. New courses can then use that voice.
       </p>
 
-      <div className="mt-4 rounded-xl border border-amber-800/20 bg-amber-50/70 p-4">
-        <p className="text-sm text-amber-950">
+      <div className="mt-4 rounded-xl border border-amber-800/20 bg-amber-50/70 p-4 dark:border-amber-300/25 dark:bg-amber-300/10">
+        <p className="text-sm text-amber-950 dark:text-amber-100">
           <strong className="font-medium">Worth knowing:</strong> notes in your
-          style are a bit less strictly grounded — roughly 10% more claims stray
-          via analogies. The option only appears on Study after you save a
-          profile here.
+          style are a bit less strictly grounded, with roughly 10% more claims
+          straying via analogies. The option only appears on Study after you
+          save a profile here.
         </p>
       </div>
 
@@ -88,7 +88,7 @@ export function StyleWorkspace() {
             value={sample}
             onChange={(e) => setSample(e.target.value)}
             rows={10}
-            placeholder="Paste a few paragraphs — an old essay, notes, a blog post. Anything in your own words."
+            placeholder="Paste a few paragraphs. An old essay, notes, a blog post. Anything in your own words."
             className="resize-y font-notes text-base"
             disabled={busy}
             aria-describedby="sample-help"
@@ -96,7 +96,7 @@ export function StyleWorkspace() {
           <p id="sample-help" className="text-sm text-muted-foreground">
             {sample.trim().length < 400
               ? `About ${Math.max(0, 400 - sample.trim().length)} more characters needed.`
-              : "Long enough — ready when you are."}
+              : "Long enough. Ready when you are."}
           </p>
         </div>
 

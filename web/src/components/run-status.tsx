@@ -26,7 +26,7 @@ const PHASES: Record<
 > = {
   planning: {
     label: "Planning your course",
-    detail: "Working out which topics to cover — a few seconds.",
+    detail: "Working out which topics to cover. A few seconds.",
   },
   gathering: {
     label: "Gathering sources",
@@ -35,7 +35,7 @@ const PHASES: Record<
   },
   writing: {
     label: "Writing your notes",
-    detail: "Sections appear below as they finish — you can start reading straight away.",
+    detail: "Sections appear below as they finish, so you can start reading straight away.",
   },
 };
 
@@ -63,7 +63,7 @@ export function RunStatus({
         aria-live="polite"
         className="text-sm font-medium text-teal-900"
       >
-        Your notes are ready and saved — come back anytime from History.
+        Your notes are ready and saved. Come back anytime from History.
       </p>
     );
   }
@@ -86,7 +86,7 @@ export function RunStatus({
           <div>
             <p className="font-medium text-foreground">
               {copy.label}
-              {showCount ? ` — ${modulesDone} of ${modulesTotal} done` : ""}
+              {showCount ? `, ${modulesDone} of ${modulesTotal} done` : ""}
             </p>
             <p className="mt-0.5 text-sm text-muted-foreground">
               {detail || copy.detail}

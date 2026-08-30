@@ -569,7 +569,7 @@ export function CourseWorkspace() {
     abortRef.current?.abort();
     setPhase("done");
     if (profile) void refreshLibrary(profile);
-    toast.message("Generation stopped — what’s ready is saved");
+    toast.message("Generation stopped. What’s ready is saved");
   }
 
   async function resumeGeneration() {

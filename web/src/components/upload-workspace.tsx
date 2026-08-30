@@ -54,7 +54,7 @@ export function UploadWorkspace() {
         : [];
       setSkipped(skippedList);
       setResult(
-        `Added ${docs} file${docs === 1 ? "" : "s"} to your material — ` +
+        `Added ${docs} file${docs === 1 ? "" : "s"} to your material. ` +
           `${chunks} passages your notes can be written from.`,
       );
       toast.success("Your material is ready to study from");
@@ -72,7 +72,8 @@ export function UploadWorkspace() {
       </h1>
       <p className="mt-2 max-w-prose text-muted-foreground">
         Add lecture notes, slides, or textbook chapters. Courses built from them
-        use only your files — every claim traces back to something you provided.
+        use only your files, so every claim traces back to something you
+        provided.
       </p>
 
       <form
@@ -109,7 +110,7 @@ export function UploadWorkspace() {
           />
           <p id="files-help" className="text-sm text-muted-foreground">
             PDFs, plain text, and markdown. Scanned PDFs with no selectable text
-            can&apos;t be read yet — you&apos;ll be told which were skipped.
+            can&apos;t be read yet, and you&apos;ll be told which were skipped.
           </p>
         </div>
 
@@ -147,15 +148,15 @@ export function UploadWorkspace() {
       {result ? (
         <div
           role="status"
-          className="mt-8 rounded-xl border border-teal-800/25 bg-teal-50 px-4 py-3"
+          className="mt-8 rounded-xl border border-teal-800/25 bg-teal-50 px-4 py-3 dark:border-teal-300/25 dark:bg-teal-300/10"
         >
-          <p className="text-sm text-teal-950">{result}</p>
+          <p className="text-sm text-teal-950 dark:text-teal-100">{result}</p>
           {skipped.length ? (
             <details className="mt-2">
-              <summary className="cursor-pointer text-sm text-teal-900">
+              <summary className="cursor-pointer text-sm text-teal-900 dark:text-teal-200">
                 {skipped.length} file{skipped.length === 1 ? "" : "s"} skipped
               </summary>
-              <ul className="mt-1 space-y-1 text-sm text-teal-900">
+              <ul className="mt-1 space-y-1 text-sm text-teal-900 dark:text-teal-200">
                 {skipped.map((reason) => (
                   <li key={reason}>{reason}</li>
                 ))}

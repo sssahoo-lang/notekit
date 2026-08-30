@@ -222,7 +222,7 @@ export function AskAbout({
                   className="measure font-notes text-[1.02rem] leading-[1.7] text-ink"
                 />
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Answered only from this section&apos;s sources — the same ones
+                  Answered only from this section&apos;s sources: the same ones
                   the notes were written from.
                 </p>
               </div>

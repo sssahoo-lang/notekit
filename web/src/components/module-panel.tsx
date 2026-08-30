@@ -194,7 +194,7 @@ export function ModulePanel({
       ) : null}
 
       {module.notes?.refused ? (
-        <p className="rounded-lg border border-amber-700/20 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+        <p className="rounded-lg border border-amber-700/20 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-300/25 dark:bg-amber-300/10 dark:text-amber-100">
           {module.notes.refusal_reason ||
             "Insufficient source material for this module."}
         </p>

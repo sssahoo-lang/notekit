@@ -53,7 +53,9 @@ export function QuizPanel({ quiz, onCite }: Props) {
                         "rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
                         !show && selected && "border-primary bg-primary/5",
                         !show && !selected && "border-border hover:border-primary/40",
-                        show && isAnswer && "border-teal-700/40 bg-teal-50 text-teal-950",
+                        show &&
+                          isAnswer &&
+                          "border-teal-700/40 bg-teal-50 text-teal-950 dark:border-teal-300/40 dark:bg-teal-300/10 dark:text-teal-100",
                         show && selected && !isAnswer && "border-destructive/40 bg-destructive/5",
                         show && !selected && !isAnswer && "opacity-60",
                       )}

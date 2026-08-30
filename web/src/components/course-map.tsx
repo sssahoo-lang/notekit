@@ -90,7 +90,7 @@ function Bar({
           {row.refused
             ? "refused"
             : row.sources === 0
-              ? "—"
+              ? "not cited"
               : `${row.sources} source${row.sources === 1 ? "" : "s"}`}
         </div>
       </div>
@@ -127,7 +127,7 @@ export function CourseMap({ modules, activeSection, onSelectSection }: Props) {
           </h2>
         </div>
         <p className="max-w-[38ch] text-[13px] leading-relaxed text-slate-400 sm:text-right">
-          Each section sized by how many separate documents it cites — breadth,
+          Each section sized by how many separate documents it cites. Breadth,
           not correctness.
         </p>
       </div>
@@ -154,7 +154,7 @@ export function CourseMap({ modules, activeSection, onSelectSection }: Props) {
                   }.`
                 : `${narrow.length} sections rest on ${NARROW_SOURCE_LIMIT} documents or fewer.`}
             </span>{" "}
-            Every claim there is still cited — there is just nothing else
+            Every claim there is still cited. There is just nothing else
             corroborating it.
           </>
         ) : (

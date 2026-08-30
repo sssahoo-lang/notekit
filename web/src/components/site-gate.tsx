@@ -79,8 +79,8 @@ export function SiteGate({ children }: { children: React.ReactNode }) {
       <div className="w-full max-w-sm">
         <h1 className="font-heading text-3xl tracking-tight">NoteKit</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          This demo is password protected — it runs against a live API key.
-          Enter the password you were given to continue.
+          This demo is password protected, because it runs against a live API
+          key. Enter the password you were given to continue.
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-3">

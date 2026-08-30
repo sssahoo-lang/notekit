@@ -41,7 +41,7 @@ export function LibraryList({
           History
         </h2>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Every goal you start is saved here — even if generation is still
+          Every goal you start is saved here, even if generation is still
           running or only partly finished. Open anytime to keep reading.
         </p>
       </section>

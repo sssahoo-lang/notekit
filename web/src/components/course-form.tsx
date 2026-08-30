@@ -101,7 +101,7 @@ export function CourseForm({
         />
 
         <p id="goal-help" className="mt-2 text-sm text-muted-foreground">
-          Say what level you want — &ldquo;from scratch&rdquo;,
+          Say what level you want: &ldquo;from scratch&rdquo;,
           &ldquo;intermediate&rdquo;, &ldquo;I already know the basics&rdquo;. It
           changes how the notes are written.
         </p>
@@ -233,7 +233,7 @@ export function CourseForm({
             Build my course
           </Button>
           <p className="text-sm text-muted-foreground">
-            About a minute. You can leave — it keeps writing.
+            About a minute. You can leave and it keeps writing.
           </p>
         </div>
       </div>
