@@ -8,7 +8,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js_16-000000?logo=nextdotjs&logoColor=white)
 ![Faithfulness](https://img.shields.io/badge/faithfulness-95.3%25-15803D)
 ![Refusal accuracy](https://img.shields.io/badge/refusal_accuracy-100%25-15803D)
-![Tests](https://img.shields.io/badge/tests-81_passing-15803D)
+![Tests](https://img.shields.io/badge/tests-116_passing-15803D)
 
 Most AI study tools always give you an answer. You cannot tell which sentences
 came from a real source and which the model invented, and they never admit when
@@ -289,6 +289,10 @@ uv run notekit calibrate evalsets/q-learning.json
 
 # Compare retrieval configurations.
 uv run notekit sweep --syllabus fixtures/q-learning.json -n q-learning --repeat 3
+
+# List saved courses, then export one as Markdown notes. No API key needed.
+uv run notekit courses
+uv run notekit export 13 --to ~/ObsidianVault
 ```
 
 ### HTTP API
@@ -314,22 +318,52 @@ than an HTTP status, because the headers are long gone by then.
 Generation continues if the client disconnects; `POST /api/courses/{id}/cancel`
 stops it explicitly.
 
+### Exporting a course
+
+```bash
+uv run notekit export 13 --to ~/ObsidianVault
+```
+
+The output is plain Markdown and opens anywhere, but it is shaped for
+[Obsidian](https://obsidian.md), because that is where the shape pays off.
+Every cited document becomes its own note, every retrieved passage carries a
+block id, and each `[c123]` marker becomes a footnote linking to that exact
+passage:
+
+```markdown
+A knowledge graph is a knowledge base that uses a graph-structured
+data model to represent and operate on data.[^c3436]
+
+[^c3436]: [[Sources/Knowledge graph#^c3436|Knowledge graph]]
+```
+
+So a claim can still be checked after it leaves the app — the passage it rests
+on travels with it. It also makes the grounding visible: in the graph view, a
+section whose claims all trace back to one source appears as a node with a
+single inbound edge, which is a weakness the web reader cannot show you.
+Refusals export as refusals, and Mermaid diagrams pass through untouched since
+Obsidian renders them natively.
+
+Passages are grouped by document rather than one note per chunk, so the number
+of edges into a source means "how many claims rest on this document".
+
 ### Tests
 
 ```bash
 uv run pytest
 ```
 
-81 tests, no API key and no database — every module here is either pure logic
+116 tests, no API key and no database — every module here is either pure logic
 or has its one external dependency (the LLM call, Postgres, the embedding
 model) faked at the boundary, so the whole suite runs offline in under a
 second. Covers topic-identity merging at the 0.86 threshold (exact match,
 merge, new topic, and the embedding backfill path), the domain router's
 source table, the shared-password gate (including a password rotation
 invalidating the old token), the quiz text parser, Mermaid-to-claim
-extraction, and the LangGraph broaden-and-retry decision — including the
-guard that a course built from uploaded material never widens to the open
-web. What it does not cover: retrieval, generation, and the API layer itself,
+extraction, the Markdown export (including the invariant that every exported
+citation resolves to a real passage), and the LangGraph broaden-and-retry
+decision — including the guard that a course built from uploaded material
+never widens to the open web. What it does not cover: retrieval, generation, and the API layer itself,
 which need a running Postgres and a real API key and are exercised instead by
 `notekit eval` and `notekit sweep` against fixed syllabi.
 
@@ -379,6 +413,8 @@ src/notekit/
   llm.py          The only module that touches the Anthropic SDK
   tracing.py      Optional Langfuse spans
   auth.py         The shared password gate for a deployed instance
+  courses.py      Saving, listing and loading generated courses
+  vault.py        Exporting a course as linked Markdown notes
   config.py       Every tunable choice in one place
 
 web/src/

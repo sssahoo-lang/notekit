@@ -10,8 +10,8 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from . import (
-    calibration, config, db, evaluation, graph, ingest, llm, retrieval, style,
-    sweep, topics, upload,
+    calibration, config, courses, db, evaluation, graph, ingest, llm, retrieval,
+    style, sweep, topics, upload, vault,
 )
 from .adapters import DEFAULT_ADAPTERS
 from .models import Syllabus
@@ -636,6 +636,55 @@ def _print_usage() -> None:
         )
     console.print(table)
     console.print(f"[dim]Estimated cost: ${total:.4f}[/]")
+
+
+@app.command("courses")
+def courses_cmd(
+    limit: int = typer.Option(20, help="How many to show"),
+) -> None:
+    """List saved courses and their ids. Needs no API key."""
+    rows = courses.list_all(limit=limit)
+    if not rows:
+        console.print("[dim]No saved courses yet.[/]")
+        return
+
+    table = Table(title="Saved courses", title_style="dim")
+    for column in ("id", "title", "sections", "words", "created"):
+        table.add_column(column)
+    for r in rows:
+        created = r["created_at"]
+        table.add_row(
+            str(r["id"]),
+            (r["title"] or r["goal"] or "")[:48],
+            str(r["module_count"] or 0),
+            f"{r['word_count'] or 0:,}",
+            created.strftime("%Y-%m-%d") if hasattr(created, "strftime") else str(created)[:10],
+        )
+    console.print(table)
+
+
+@app.command("export")
+def export_cmd(
+    course_id: int = typer.Argument(..., help="Course id, from `notekit courses`"),
+    to: Path = typer.Option(
+        ..., "--to", help="Folder to write into — an Obsidian vault, or anywhere"
+    ),
+) -> None:
+    """Write a saved course out as Markdown notes. Needs no API key."""
+    course = courses.get(course_id)
+    if not course:
+        console.print(f"[red]No course with id {course_id}.[/]")
+        raise typer.Exit(1)
+
+    result = vault.export_course(course, to)
+    console.print(
+        f"[green]Exported[/] {course.get('title') or course.get('goal')} — "
+        f"{result.file_count} notes"
+    )
+    console.print(f"  [dim]{result.folder}[/]")
+    console.print(
+        f"  {len(result.modules)} sections, {len(result.sources)} sources"
+    )
 
 
 if __name__ == "__main__":

@@ -303,6 +303,29 @@ def list_for_user(user_id: str, *, limit: int = 50) -> list[dict]:
     return [_summary_row(r) for r in rows]
 
 
+def list_all(*, limit: int = 50) -> list[dict]:
+    """Every saved course, newest first, regardless of user.
+
+    The web UI scopes history to one browser profile, which is right there and
+    wrong on the command line: someone exporting a course locally knows which
+    course they mean but not which profile id it was saved under.
+    """
+    with db.connect() as conn:
+        ensure_table(conn)
+        rows = conn.execute(
+            """
+            SELECT id, user_id, goal, title, created_at, word_count,
+                   generation_status,
+                   jsonb_array_length(modules) AS module_count
+            FROM courses
+            ORDER BY COALESCE(opened_at, created_at) DESC
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def claim(from_users: list[str], to_user: str) -> int:
     """Move courses from other trust-ids onto one identity.
 
