@@ -2,6 +2,7 @@
 
 import { ProgressBar } from "@/components/progress-bar";
 import { Button } from "@/components/ui/button";
+import { guidanceFor } from "@/lib/run-error";
 import { cn } from "@/lib/utils";
 
 export type RunPhase =
@@ -116,7 +117,9 @@ export function RunStatus({
  * A failure the reader can act on.
  *
  * Every message says what went wrong and what to do next. The backend's own
- * wording is kept, but framed rather than dumped raw.
+ * wording is kept in the disclosure, but framed rather than dumped raw, and
+ * the retry button appears only when retrying could actually succeed. See
+ * lib/run-error.ts for why those are two separate questions.
  */
 export function RunError({
   message,
@@ -128,6 +131,7 @@ export function RunError({
   className?: string;
 }) {
   const guidance = guidanceFor(message);
+  const canRetry = Boolean(onRetry) && guidance.retryable;
 
   return (
     <div
@@ -147,7 +151,7 @@ export function RunError({
           {message}
         </p>
       </details>
-      {onRetry ? (
+      {canRetry ? (
         <Button
           type="button"
           size="sm"
@@ -160,43 +164,4 @@ export function RunError({
       ) : null}
     </div>
   );
-}
-
-function guidanceFor(message: string): { headline: string; next: string } {
-  const lower = message.toLowerCase();
-
-  if (lower.includes("fetch") || lower.includes("networkerror") || lower.includes("failed to fetch")) {
-    return {
-      headline: "Can't reach the NoteKit service",
-      next: "The backend isn't responding. Start it with `uv run uvicorn notekit.api:app --port 8000`, then try again.",
-    };
-  }
-  if (lower.includes("database")) {
-    return {
-      headline: "The database isn't running",
-      next: "Start it with `docker compose up -d` from the project folder, then try again.",
-    };
-  }
-  if (lower.includes("api_key") || lower.includes("authentication") || lower.includes("401")) {
-    return {
-      headline: "The API key is missing or invalid",
-      next: "Check that ANTHROPIC_API_KEY is set in your .env file, then restart the backend.",
-    };
-  }
-  if (lower.includes("rate") || lower.includes("429")) {
-    return {
-      headline: "Too many requests right now",
-      next: "The model is rate limiting. Wait a minute and try again.",
-    };
-  }
-  if (lower.includes("no such") || lower.includes("404") || lower.includes("not found")) {
-    return {
-      headline: "That isn't there any more",
-      next: "It may have been deleted. Go back and pick something else.",
-    };
-  }
-  return {
-    headline: "Something went wrong",
-    next: "The step didn't finish. Trying again usually works; if it keeps failing, the detail below will say why.",
-  };
 }
