@@ -95,8 +95,8 @@ reproduced, and the honest number to quote is the one that has.
 
 Settling it needs `--repeat 3` on both sides, which is queued rather than done.
 Reporting a figure that fails to reproduce would be a strange thing for a
-project about verifying claims to do, so the table above states what measured
-and this paragraph states what is unresolved.
+project about verifying claims to do, so the table above states what
+measured and this paragraph states what is unresolved.
 
 Refusal is calibrated from data rather than guessed. Questions the corpus covers
 rerank at +0.28 to +8.50; questions it does not (the French Revolution,
@@ -278,9 +278,19 @@ labelled probes, and abstention is scored like any other behaviour.
 notes into atomic claims and checks each for entailment against the retrieved
 passages. Diagrams are included: every Mermaid edge becomes a claim.
 
-**Personalisation with a known cost.** Style matching is measured at roughly
-**10 points of faithfulness**, so it ships off by default. Knowing the price is
-the point.
+**Personalisation that cannot become invention.** Two mechanisms, one rule.
+A style profile learned from a writing sample carries form and never subject
+matter, because pasting someone's notes into the prompt as an exemplar would
+put content-shaped text beside the retrieved passages and the model would
+eventually assert from it. Per-course controls (level, plain English or field
+terms, brief or thorough, worked examples, formulae, diagrams) follow the same
+rule: asking for worked examples surfaces the ones the passages contain and
+cannot conjure any, because a reader who asks for examples and silently gets
+invented ones is worse off than one who gets none.
+
+Style matching is measured at roughly **10 points of faithfulness**, so it
+ships off by default. Knowing the price is the point. What the newer controls
+cost has not been measured yet, which is why they default to off as well.
 
 ---
 
@@ -463,6 +473,7 @@ src/notekit/
   sweep.py        Comparing retrieval configurations
   explain.py      Answering questions about a highlighted passage
   style.py        Learning a writing style without carrying content
+  preferences.py  Per-course choices about the form of the notes
   llm.py          The only module that touches the Anthropic SDK
   tracing.py      Optional Langfuse spans
   auth.py         The shared password gate for a deployed instance
@@ -472,8 +483,9 @@ src/notekit/
 
 web/src/
   components/     Reader, section rail, citations, quiz, ask-about, diagrams
-  lib/            API client, profile, course status helpers
+  lib/            API client, profile, course status helpers, and their tests
 
+.github/workflows/ci.yml  Tests, typecheck, lint and build on every push
 scripts/dev.sh    Start the API reliably
 scripts/doctor.sh Diagnose and repair the environment
 Dockerfile        Production image: CPU-only torch, weights baked in
@@ -688,14 +700,23 @@ is why Wikipedia is fetched alongside it.
 | 3. Practice questions | done |
 | 4. Uploads, per-user namespaces, style matching | done |
 | 5. Open-domain routing across many sources | done |
-| 6. Web UI | working locally |
-| 7. Deployment | container and gate built and verified; not yet hosted |
+| 6. Web UI | done, runs locally |
+| 7. Deployment | container and gate built and verified; deliberately not hosted |
 | 8. Markdown export: courses as linked notes | done |
+| 9. Per-course control over the form of the notes | done, effect not yet measured |
+| 10. Corpus expiry and recency-aware fetching | done, effect not yet measured |
 
-Beyond the milestones: 116 unit tests cover the logic layer, and every
-citation the export writes is verified to resolve to a real source passage.
-The export's Obsidian-specific rendering (block-reference jumps, collapsed
-callouts) has not yet been confirmed inside Obsidian itself.
+Beyond the milestones: 193 tests run in CI on every push, 157 on the Python
+logic layer and 36 on the web one, and every citation the export writes is
+verified to resolve to a real source passage.
+
+Three things are built but unmeasured, and are called out here rather than
+counted as finished. The faithfulness range above needs `notekit eval
+--repeat 3` to settle (see [Results](#results)). Whether the writing controls
+change the notes as intended, and whether asking sources for recent work
+improves a course, are both eval questions rather than build ones. The
+export's Obsidian-specific rendering (block-reference jumps, collapsed
+callouts) has not been confirmed inside Obsidian itself.
 
 Built with Python, FastAPI, Postgres/pgvector, the Anthropic API, LangGraph,
 Langfuse, sentence-transformers, Next.js, React and TypeScript.
