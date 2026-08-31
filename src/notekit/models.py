@@ -54,6 +54,17 @@ class Syllabus(BaseModel):
             "without marketing language."
         )
     )
+    corpus_query: str = Field(
+        default="",
+        description=(
+            "A retrieval query for the subject as a whole, in the language of "
+            "source material, two to six terms. It must disambiguate the "
+            "subject from unrelated fields that happen to share its words: "
+            "'system design' has to find distributed systems architecture and "
+            "not industrial design, instructional design, or UI design "
+            "systems. Never write it as a learner request."
+        )
+    )
     modules: list[Module] = Field(
         description="Three to five modules in pedagogical order, prerequisites first"
     )

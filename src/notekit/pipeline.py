@@ -200,6 +200,31 @@ def plan_syllabus(goal: str, *, level: Level | None = None) -> Syllabus:
     )
 
 
+def corpus_queries(syllabus: Syllabus) -> list[str]:
+    """The queries a topic's corpus is built from.
+
+    The subject-level query used to be the slug: what the reader typed, reduced
+    to kebab-case. For an unambiguous subject that is fine, and for an
+    ambiguous one it is actively harmful. "system design" matched "design" and
+    "system" independently and returned Cadence Design Systems, Fluent Design
+    System, instructional design, design-build construction, inverse design of
+    polypills and a fusion reactor heat exhaust study. Four documents in twenty
+    were about the subject, and sections then had to report that the passages
+    did not cover what they were asked to teach.
+
+    The planner already writes retrieval queries in the language of source
+    material for every module, so it writes one for the subject too. The slug
+    stays as the fallback, for syllabi planned before the field existed.
+
+    Duplicates are dropped: the subject query and a module query can coincide,
+    and fetching the same thing twice halves the budget for everything else.
+    """
+    topic = (syllabus.corpus_query or "").strip() or syllabus.topic_slug.replace(
+        "-", " "
+    )
+    return list(dict.fromkeys([topic, *(m.query for m in syllabus.modules)]))
+
+
 def _format_passages(chunks: list[Chunk]) -> str:
     return "\n\n".join(
         f"[{c.citation_key}] (from: {c.document_title})\n{c.text}" for c in chunks
@@ -555,10 +580,7 @@ async def arun_course_events(
         summary = await asyncio.to_thread(
             ingest.ingest_topic,
             slug=syllabus.topic_slug,
-            query=[
-                syllabus.topic_slug.replace("-", " "),
-                *(m.query for m in syllabus.modules),
-            ],
+            query=corpus_queries(syllabus),
             namespace=namespace,
             limit=limit,
             cfg=cfg,
@@ -686,10 +708,7 @@ def run_course(
     if not skip_ingest:
         summary = ingest.ingest_topic(
             slug=syllabus.topic_slug,
-            query=[
-                syllabus.topic_slug.replace("-", " "),
-                *(m.query for m in syllabus.modules),
-            ],
+            query=corpus_queries(syllabus),
             namespace=namespace,
             limit=limit,
             cfg=cfg,
