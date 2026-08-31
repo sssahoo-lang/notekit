@@ -158,9 +158,14 @@ async def astream_text(
     prompt: str,
     max_tokens: int,
     cached_prefix: str | None = None,
+    purpose: str = "stream",
 ) -> str:
     """Collect a plain completion. Same request shape as astream_complete, so a
-    cached prefix written by that call is read rather than re-sent."""
+    cached prefix written by that call is read rather than re-sent.
+
+    `purpose` labels the trace, and is forwarded rather than defaulted here so
+    the quiz call does not show up as a generic stream alongside the notes.
+    """
     chunks: list[str] = []
     async for delta in astream_complete(
         model=model,
@@ -168,6 +173,7 @@ async def astream_text(
         prompt=prompt,
         max_tokens=max_tokens,
         cached_prefix=cached_prefix,
+        purpose=purpose,
     ):
         chunks.append(delta)
     return "".join(chunks)

@@ -439,7 +439,17 @@ async def astream_module_notes(
 
     quiz = None
     if with_quiz:
-        quiz = await agenerate_quiz(module, chunks, passages=passages)
+        try:
+            quiz = await agenerate_quiz(module, chunks, passages=passages)
+        except Exception as exc:  # noqa: BLE001
+            # The notes are written and paid for by this point. Letting a quiz
+            # failure propagate loses them: the module worker turns any
+            # exception into a module_error, so the reader sees a failed
+            # section rather than a section without practice questions.
+            # agenerate_quiz already falls back internally so a format slip
+            # costs money rather than the feature; the same reasoning applies
+            # here, one level up.
+            print(f"  ! quiz failed for '{module.title[:40]}': {exc}")
 
     yield {
         "type": "module",
