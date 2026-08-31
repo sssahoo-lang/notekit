@@ -17,7 +17,7 @@ import re
 
 from concurrent.futures import ThreadPoolExecutor
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from . import config, llm
 from .models import Chunk, Module, ModuleNotes
@@ -174,6 +174,62 @@ def _passages(chunks: list[Chunk]) -> str:
     return "\n\n".join(f"[{c.citation_key}] {c.text}" for c in chunks)
 
 
+def _verdicts_for(
+    claims: list[str],
+    passages: str,
+    *,
+    offset: int = 0,
+    retried: bool = False,
+) -> dict[int, _Verdict]:
+    """Judge a list of claims, returning verdicts keyed by 1-based index.
+
+    The judge occasionally degenerates mid-response into repeating punctuation
+    and runs into max_tokens. That arrives as malformed JSON, so it raises
+    while parsing rather than returning a short but valid list, and the
+    missing-verdict handling in `evaluate_module` never gets the chance to
+    apply. One truncated response would otherwise kill a whole `--repeat` run.
+
+    A retry covers the stochastic case. If it happens twice, the list is halved
+    and judged in two calls, since a shorter response has less room to run
+    away. A single claim that still cannot be judged is a real failure and is
+    raised rather than scored, because silently marking claims unsupported
+    would understate faithfulness without saying so.
+
+    `offset` maps a half's local 1-based numbering back onto the caller's.
+    """
+    numbered = "\n".join(f"{i}. {c}" for i, c in enumerate(claims, 1))
+    try:
+        verdicts = llm.parse(
+            model=config.JUDGE_MODEL,
+            system=_VERDICT_SYSTEM,
+            prompt=(
+                f"Source passages:\n\n{passages}\n\n"
+                f"Claims to check:\n{numbered}"
+            ),
+            max_tokens=8000,
+            schema=_Verdicts,
+            purpose="judge-verdicts",
+        )
+    except ValidationError:
+        if not retried:
+            return _verdicts_for(claims, passages, offset=offset, retried=True)
+        if len(claims) == 1:
+            raise
+        mid = len(claims) // 2
+        return {
+            **_verdicts_for(claims[:mid], passages, offset=offset),
+            **_verdicts_for(claims[mid:], passages, offset=offset + mid),
+        }
+
+    # An index outside the range asked about cannot be mapped back onto the
+    # caller's numbering, and would corrupt a neighbouring half's verdict.
+    return {
+        v.claim_index + offset: v
+        for v in verdicts.verdicts
+        if 1 <= v.claim_index <= len(claims)
+    }
+
+
 def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
     """Score one module's notes for faithfulness and coverage."""
     if notes.refused:
@@ -195,20 +251,7 @@ def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
     if not all_claims:
         return ModuleEval(module_title=notes.module_title)
 
-    numbered = "\n".join(f"{i}. {c}" for i, c in enumerate(all_claims, 1))
-    verdicts = llm.parse(
-        model=config.JUDGE_MODEL,
-        system=_VERDICT_SYSTEM,
-        prompt=(
-            f"Source passages:\n\n{_passages(notes.chunks)}\n\n"
-            f"Claims to check:\n{numbered}"
-        ),
-        max_tokens=8000,
-        schema=_Verdicts,
-        purpose="judge-verdicts",
-    )
-
-    by_index = {v.claim_index: v for v in verdicts.verdicts}
+    by_index = _verdicts_for(all_claims, _passages(notes.chunks))
     claims = [
         ClaimCheck(
             claim=claim,
