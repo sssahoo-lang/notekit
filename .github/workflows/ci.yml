@@ -46,6 +46,11 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Unit tests
         run: npm run test
+      # LayoutProps and friends are generated into .next/types, which
+      # tsconfig includes. Without this, tsc fails on a clean checkout for
+      # types that exist on any machine that has run the dev server.
+      - name: Generate route types
+        run: npx next typegen
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint
