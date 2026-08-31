@@ -38,7 +38,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      # npm install rather than npm ci. The lockfile is generated on macOS,
+      # where vite resolves fsevents and never records the @parcel/watcher
+      # builds Linux needs, so npm ci rejects it as incomplete on the runner.
+      # Resolving for the runner's own platform is the tradeoff that keeps the
+      # lockfile committed from one machine usable on another.
+      - run: npm install --no-audit --no-fund
       - name: Unit tests
         run: npm run test
       - name: Typecheck

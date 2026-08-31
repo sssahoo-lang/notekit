@@ -6,9 +6,11 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Postgres](https://img.shields.io/badge/Postgres_16-pgvector-4169E1?logo=postgresql&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js_16-000000?logo=nextdotjs&logoColor=white)
-![Faithfulness](https://img.shields.io/badge/faithfulness-95.3%25-15803D)
+![Faithfulness](https://img.shields.io/badge/faithfulness-87.7%E2%80%9391.1%25-15803D)
 ![Refusal accuracy](https://img.shields.io/badge/refusal_accuracy-100%25-15803D)
-![Tests](https://img.shields.io/badge/tests-116_passing-15803D)
+[![CI](https://github.com/sssahoo-lang/notekit/actions/workflows/ci.yml/badge.svg)](https://github.com/sssahoo-lang/notekit/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-193_passing-15803D)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Most AI study tools always give you an answer. You cannot tell which sentences
 came from a real source and which the model invented, and they never admit when
@@ -17,9 +19,11 @@ they have nothing to work from. NoteKit is a retrieval-augmented generation
 only from those, cites each claim back to the passage it came from, and refuses
 when retrieval comes back thin.
 
-The refusal and the grounding are not promises. They are measured. **95% of
-generated claims are verified against their retrieved context, and 100% of
-deliberately out-of-scope questions are correctly refused.**
+The refusal and the grounding are not promises. They are measured. **Around 90%
+of generated claims are verified against their retrieved context, and 100% of
+deliberately out-of-scope questions are correctly refused.** The judge that
+produces the first of those numbers is itself in the repository, and the
+[Results](#results) section says what it varies by.
 
 [![NoteKit screenshots: library, cited reader, collapsible sections, a diagram treated as a claim, practice questions, and style matching](docs/screenshots.png)](docs/screenshots.png)
 
@@ -54,9 +58,17 @@ deliberately out-of-scope questions are correctly refused.**
 - **Explains what confuses you.** Highlight any sentence and ask. It is
   answered from that section's own passages, so "explain it simpler" cannot
   become "make something up".
+- **Takes instructions about form.** Level, plain English or field terms, brief
+  or thorough, worked examples, formulae, diagrams. Chosen before writing,
+  and unable to invent what the sources do not hold.
 - **Writes in your style.** Learns how you write from a sample and applies it to
   any course, at a measured cost to grounding.
 - **Generates practice questions** answerable from the same passages.
+- **Keeps corpora current.** An indexed topic ages out and is topped up on the
+  next course, and sources can be asked for recent work as well as the most
+  relevant.
+- **Exports to Markdown** as linked notes, one file per section with a page per
+  source, readable in Obsidian or any editor.
 - **Draws diagrams** as Mermaid, so every node and edge is a claim that gets
   scored like the prose.
 
@@ -67,11 +79,24 @@ a 13-document corpus from Wikipedia and arXiv:
 
 | Metric | Result |
 |---|---|
-| **Faithfulness**, claims entailed by retrieved passages | **95.3%** (93.0-97.6% across runs) |
+| **Faithfulness**, claims entailed by retrieved passages | **87.7-91.1%** across two runs, see below |
 | **Refusal accuracy**, out-of-corpus questions correctly declined | **100%** (16/16) |
 | Cost per course | $0.22-0.38 ($0.34 with practice questions) |
 | Time to first prose | 18.4s · full course 41.2s |
 | Coverage, learning goals addressed | 42-67%, see [Limitations](#limitations-and-what-isnt-proven) |
+
+**About that faithfulness figure.** An earlier round of runs on this fixture
+averaged 95.3% and ranged 93.0-97.6%. Two runs made since, one of them on the
+code as it stood before any of the recent changes, came in at 87.7% and 91.1%.
+The gap between those two is 3.4 points, inside the run-to-run variation this
+fixture is already known to show, so a single pair of runs cannot separate a
+real change from noise. What it can say is that the earlier range has not
+reproduced, and the honest number to quote is the one that has.
+
+Settling it needs `--repeat 3` on both sides, which is queued rather than done.
+Reporting a figure that fails to reproduce would be a strange thing for a
+project about verifying claims to do, so the table above states what measured
+and this paragraph states what is unresolved.
 
 Refusal is calibrated from data rather than guessed. Questions the corpus covers
 rerank at +0.28 to +8.50; questions it does not (the French Revolution,
@@ -266,6 +291,9 @@ the point.
 ```bash
 # Fetch and index a corpus. No API key needed.
 uv run notekit ingest "q-learning" --limit 10
+uv run notekit ingest "q-learning" --refresh   # add sources published since
+uv run notekit ingest "q-learning" --recent    # ask for recent work too
+uv run notekit topics                          # what is indexed, and how old
 
 # See what retrieval returns. No API key needed.
 uv run notekit search "how does the Bellman equation define the Q function" -n q-learning
@@ -353,7 +381,7 @@ of edges into a source means "how many claims rest on this document".
 uv run pytest
 ```
 
-116 tests, no API key and no database. Every module here is either pure logic
+157 tests, no API key and no database. Every module here is either pure logic
 or has its one external dependency (the LLM call, Postgres, the embedding
 model) faked at the boundary, so the whole suite runs offline in under a
 second. Covers topic-identity merging at the 0.86 threshold (exact match,
@@ -361,11 +389,24 @@ merge, new topic, and the embedding backfill path), the domain router's
 source table, the shared-password gate (including a password rotation
 invalidating the old token), the quiz text parser, Mermaid-to-claim
 extraction, the Markdown export (including the invariant that every exported
-citation resolves to a real passage), and the LangGraph broaden-and-retry
-decision, including the guard that a course built from uploaded material
-never widens to the open web. What it does not cover: retrieval, generation, and the API layer itself,
+citation resolves to a real passage), recovery from a truncated faithfulness
+judge (including the index remapping that decides which claim a verdict
+lands on), the note preferences (including that an unset request renders the
+prompt it rendered before they existed), corpus expiry, the relevance and
+recency blend, and the LangGraph broaden-and-retry decision, including the
+guard that a course built from uploaded material never widens to the open web.
+
+The web logic layer has its own 36 under `web/src/lib`, run with `npm run
+test`, covering grounding breadth and the library's course states.
+
+What none of it covers: retrieval, generation, and the API layer itself,
 which need a running Postgres and a real API key and are exercised instead by
-`notekit eval` and `notekit sweep` against fixed syllabi.
+`notekit eval` and `notekit sweep` against fixed syllabi. Components are left
+to the running app rather than copied into jsdom.
+
+Every one of these runs in CI on each push, along with the web typecheck,
+lint and production build. No secrets are needed, because none of it reaches
+a network.
 
 ## Evaluation and tracing
 
@@ -381,17 +422,28 @@ never stop someone studying.
 
 ## Deploying
 
-The API ships as a container: CPU-only torch, model weights baked in at build
-time so nothing is downloaded on boot, single worker, non-root. It needs about
-800 MB of RAM with both models warm, which is the cost of keeping embeddings and
-reranking local.
+**This runs locally, and there is no hosted instance.** Keeping embeddings and
+reranking on the machine is what lets the whole system run on one API key, and
+it is also what makes hosting cost real money: the image needs about 1 GB of
+RAM with both models warm, which is above every free tier worth using. For a
+project whose point is the measurements, paying monthly to keep a demo warm
+buys nothing the numbers and the screenshots do not already show.
 
-A shared password can be put in front of the whole API by setting
-`SITE_PASSWORD`, which is a lock on the front door, not authentication. Unset
-it and the gate does not exist, which is why none of it shows up in local
-development.
+The deployment path is built and verified rather than merely sketched, because
+a container that has never been built is not evidence of anything:
 
-Step by step, including what to set where and what it costs: **[DEPLOY.md](DEPLOY.md)**.
+- The image is a multi-stage build with CPU-only torch and the model weights
+  baked in at build time, so nothing is downloaded on boot. 609 MB, measured,
+  down from 1.17 GB before the user was created ahead of the copy (a
+  `chown -R` afterwards duplicated the whole virtualenv into a second layer).
+- Peak resident memory with both models warm is 590 MB, which sets the 1 GB
+  floor.
+- A shared password can be put in front of the whole API with `SITE_PASSWORD`,
+  which is a lock on the front door, not authentication. Unset it and the gate
+  does not exist, which is why none of it appears in local development.
+
+If you do want it online, the step-by-step, including what to set where and
+what it costs, is in **[DEPLOY.md](DEPLOY.md)**.
 
 ## Project layout
 
