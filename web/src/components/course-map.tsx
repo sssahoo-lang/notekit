@@ -104,6 +104,14 @@ export function CourseMap({ modules, activeSection, onSelectSection }: Props) {
 
   const max = Math.max(...rows.map((r) => r.sources), 1);
   const narrow = rows.filter((r) => r.narrow);
+  // Sections drawing on few documents that carry too few citations to be
+  // called narrow. They are not evidence of a problem, but they are not
+  // evidence of breadth either, and the summary below must not count them as
+  // if they were: a truncated section with one source and two citations once
+  // sat under the words "No section leans on fewer than 3 documents".
+  const tooShortToJudge = rows.filter(
+    (r) => !r.narrow && !r.refused && r.sources > 0 && r.sources <= NARROW_SOURCE_LIMIT,
+  );
 
   return (
     <section
@@ -156,6 +164,16 @@ export function CourseMap({ modules, activeSection, onSelectSection }: Props) {
             </span>{" "}
             Every claim there is still cited. There is just nothing else
             corroborating it.
+          </>
+        ) : tooShortToJudge.length ? (
+          <>
+            <span className="text-slate-200">
+              {tooShortToJudge.length === 1
+                ? `Section ${tooShortToJudge[0].index + 1} is too short to judge.`
+                : `${tooShortToJudge.length} sections are too short to judge.`}
+            </span>{" "}
+            Each cites too little to say whether its sources are broad or
+            narrow.
           </>
         ) : (
           <>No section leans on fewer than {NARROW_SOURCE_LIMIT + 1} documents.</>

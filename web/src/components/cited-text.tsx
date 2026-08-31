@@ -22,9 +22,35 @@ type Props = {
 
 type Token = string | { ids: number[] };
 
-/** Split on blank lines so each paragraph is a real element. */
-function toParagraphs(text: string): string[] {
-  return text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+/**
+ * Split into paragraphs.
+ *
+ * Blank lines are the paragraph break, but a list is written with single
+ * newlines between its items, and splitting on blank lines alone ran a whole
+ * list together into one unbroken block of text. The notes task asks the model
+ * not to use lists, and it does anyway; a reader should not be handed a wall
+ * of run-together sentences when it does.
+ *
+ * A line is treated as its own paragraph when it opens like a list item or a
+ * bolded lead-in. Ordinary single newlines stay soft, so a wrapped sentence is
+ * not broken in half.
+ */
+const BLOCK_START = /^\s*(?:[-*+]\s+|\d+[.)]\s+|\*\*)/;
+
+export function toParagraphs(text: string): string[] {
+  const out: string[] = [];
+  for (const block of text.split(/\n\s*\n/)) {
+    let current: string[] = [];
+    for (const line of block.split("\n")) {
+      if (BLOCK_START.test(line) && current.length) {
+        out.push(current.join("\n").trim());
+        current = [];
+      }
+      current.push(line);
+    }
+    if (current.length) out.push(current.join("\n").trim());
+  }
+  return out.map((p) => p.trim()).filter(Boolean);
 }
 
 /**

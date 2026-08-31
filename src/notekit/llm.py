@@ -116,6 +116,11 @@ def complete(
         return text
 
 
+# Stop reasons that mean the model finished saying what it had to say. Any
+# other value leaves the text truncated, however cleanly the stream ended.
+_CLEAN_STOPS = {"end_turn", "stop_sequence"}
+
+
 async def astream_complete(
     *,
     model: str,
@@ -149,6 +154,16 @@ async def astream_complete(
         span["output"] = "".join(collected)
         if final.stop_reason == "refusal":
             raise RuntimeError(f"Model declined the request: {final.stop_details}")
+        # Anything other than a natural finish means the text is incomplete,
+        # and the caller has no way to tell: a stream that stops early still
+        # ends cleanly, so the partial notes would be stored as if they were
+        # the whole thing. Sections have been saved ending mid-word, and
+        # mid-citation, because this was not checked.
+        if final.stop_reason not in _CLEAN_STOPS:
+            raise RuntimeError(
+                f"Generation stopped early ({final.stop_reason}) after "
+                f"{final.usage.output_tokens} tokens; the text is incomplete."
+            )
 
 
 async def astream_text(

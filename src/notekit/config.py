@@ -41,7 +41,13 @@ JUDGE_MODEL = "claude-haiku-4-5"
 # since it changes the generation path.
 GENERATION_THINKING: dict | None = None
 
-MAX_TOKENS_NOTES = 4000
+# Sections that finish run to about 1,500 words, and the notes task asks for a
+# few paragraphs per learning goal across two to four goals. 4,000 left no
+# headroom for the longer ones: on a five-section system design course, two
+# sections hit the cap and were stored truncated mid-word, one of them
+# mid-citation. Raising it does not make the model write more, it lets the
+# sections that were already writing that much finish.
+MAX_TOKENS_NOTES = 8000
 MAX_TOKENS_PLAN = 2000
 MAX_TOKENS_QUIZ = 3000
 MAX_TOKENS_EXPLAIN = 800
