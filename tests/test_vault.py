@@ -171,7 +171,7 @@ def test_a_citation_repeated_is_only_listed_once():
 
 def test_an_unknown_citation_id_is_left_as_literal_text():
     # A hallucinated or dropped id must not become a footnote that resolves to
-    # nothing — a visible oddity beats a silent dangling reference.
+    # nothing. A visible oddity beats a silent dangling reference.
     by_chunk, _ = vault.collect_sources(
         course(modules=[module(chunks=[chunk(1)])])
     )

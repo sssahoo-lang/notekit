@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start the NoteKit API reliably.
 #
-# The editable install of `notekit` has broken repeatedly during development —
+# The editable install of `notekit` has broken repeatedly during development:
 # `ModuleNotFoundError: No module named 'notekit'` from a venv that worked
 # minutes earlier. The cause was never reproducible on demand (concurrent
 # `uv run`, `uv sync --reinstall-package`, and a plain reinstall were all tried
@@ -30,12 +30,12 @@ PTH=.venv/lib/python3.11/site-packages/_editable_impl_notekit.pth
 # Durable backstop: see scripts/doctor.sh for why a .py rather than a .pth.
 "$ROOT/scripts/doctor.sh" >/dev/null 2>&1 || true
 if [ ! -d .venv ]; then
-  echo "  no .venv — creating"
+  echo "  no .venv, creating"
   uv sync
 fi
 
 if ! PYTHONPATH=src .venv/bin/python -c "import notekit" 2>/dev/null; then
-  echo "  notekit not importable — rebuilding the environment"
+  echo "  notekit not importable, rebuilding the environment"
   rm -rf .venv
   uv sync
 fi

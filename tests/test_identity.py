@@ -1,6 +1,6 @@
 """normalize() is the one place a display name becomes a storage key.
 Before this existed, "Ria Butt" and "ria butt" were different users with
-different histories — every case here is a pair that must collapse."""
+different histories. Every case here is a pair that must collapse."""
 
 import pytest
 

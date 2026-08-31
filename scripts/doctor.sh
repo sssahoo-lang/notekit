@@ -8,7 +8,7 @@ cd "$ROOT"
 fail=0
 
 # The durable fix. uv keeps re-setting macOS UF_HIDDEN on the editable .pth,
-# and Python 3.11+ silently skips hidden .pth files — link-mode=copy reduces it
+# and Python 3.11+ silently skips hidden .pth files; link-mode=copy reduces it
 # but does not stop it. The hidden-file check applies only to .pth files, so a
 # sitecustomize.py is honoured either way.
 write_sitecustomize() {
@@ -33,7 +33,7 @@ PYEOF_INNER
 
 check() { printf '  %-34s' "$1"; }
 ok()    { echo "ok"; }
-bad()   { echo "FAILED — $1"; fail=1; }
+bad()   { echo "FAILED: $1"; fail=1; }
 
 echo "NoteKit environment"
 
@@ -60,19 +60,19 @@ check "notekit importable"
 if PYTHONPATH=src .venv/bin/python -c "import notekit" 2>/dev/null; then
   ok
 else
-  echo "broken — rebuilding"
+  echo "broken, rebuilding"
   rm -rf .venv && uv sync >/dev/null 2>&1
   PYTHONPATH=src .venv/bin/python -c "import notekit" 2>/dev/null \
     && echo "  repaired" || bad "uv sync did not fix it"
 fi
 
 # scripts/dev.sh sets PYTHONPATH so the server survives without this, but the
-# `notekit` console script has no such fallback — repair it rather than warn.
+# `notekit` console script has no such fallback, so repair it rather than warn.
 check "editable path present"
 if .venv/bin/python -c "import sys; sys.exit(0 if any('NoteKit/src' in p for p in sys.path) else 1)" 2>/dev/null; then
   ok
 else
-  echo "missing — reinstalling"
+  echo "missing, reinstalling"
   uv sync --reinstall-package notekit >/dev/null 2>&1
   if .venv/bin/python -c "import sys; sys.exit(0 if any('NoteKit/src' in p for p in sys.path) else 1)" 2>/dev/null; then
     echo "  repaired"
@@ -93,7 +93,7 @@ else bad "add a real key to .env"; fi
 
 check "API responding"
 curl -s --max-time 4 localhost:8000/api/health >/dev/null 2>&1 \
-  && ok || echo "not running — start with: ./scripts/dev.sh"
+  && ok || echo "not running; start with: ./scripts/dev.sh"
 
 echo
 [ "$fail" -eq 0 ] && echo "All good." || echo "Fix the items marked FAILED above."

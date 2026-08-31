@@ -1,5 +1,5 @@
 """The shared password gate. It is a lock on the front door, not
-authentication — see auth.py's own docstring — but the lock itself has to
+authentication (see auth.py's own docstring), but the lock itself has to
 actually work: wrong passwords rejected, tokens forgeable only with the
 password, timing-safe comparison, and the gate fully inert when unset."""
 

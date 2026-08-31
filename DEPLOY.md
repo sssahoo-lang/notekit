@@ -3,7 +3,7 @@
 Two pieces go up separately: the API (a container, on Railway) and the web UI
 (a Next.js app, on Vercel). The database is managed Postgres with pgvector.
 
-Everything here is something you run with your own accounts — the config and the
+Everything here is something you run with your own accounts. The config and the
 container are built and verified, but nobody else can sign in as you.
 
 ---
@@ -24,11 +24,11 @@ running the embedding and reranking models locally, which is also the reason the
 whole project needs one API key instead of two.
 
 The image runs a single worker on purpose. A second worker would load its own
-copy of both models and double the memory for no throughput gain — the bottleneck
-is the Anthropic API, not local CPU.
+copy of both models and double the memory for no throughput gain, because the
+bottleneck is the Anthropic API, not local CPU.
 
 Cold start is a few seconds: the model weights are baked into the image at build
-time, so nothing is downloaded on boot. That is deliberate — fetching 421 MB
+time, so nothing is downloaded on boot. That is deliberate: fetching 421 MB
 from HuggingFace on first request would blow through any platform health check.
 
 ---
@@ -41,7 +41,7 @@ Create a managed Postgres instance and confirm pgvector is available:
 psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-If that fails, the provider doesn't ship pgvector — Neon and Supabase both do.
+If that fails, the provider doesn't ship pgvector. Neon and Supabase both do.
 Then load the schema:
 
 ```bash
@@ -54,14 +54,14 @@ Keep the connection string. Managed providers usually require TLS, so use the
 ## 2. API on Railway
 
 Railway reads [`railway.json`](railway.json) and builds the
-[`Dockerfile`](Dockerfile) — no build configuration to fill in. Point a new
-service at this repo, then set:
+[`Dockerfile`](Dockerfile), so there is no build configuration to fill in. Point
+a new service at this repo, then set:
 
 | Variable | Value |
 |---|---|
 | `ANTHROPIC_API_KEY` | your key |
 | `DATABASE_URL` | from step 1 |
-| `SITE_PASSWORD` | any passphrase — see below |
+| `SITE_PASSWORD` | any passphrase (see below) |
 | `ALLOWED_ORIGINS` | leave empty for now; step 4 fills it in |
 
 Raise the memory limit to at least 1 GB before the first deploy.
@@ -78,7 +78,7 @@ curl https://YOUR-API.up.railway.app/api/health
 
 ## 3. Web UI on Vercel
 
-Import the repo and set **Root Directory** to `web` — without that, Vercel builds
+Import the repo and set **Root Directory** to `web`. Without that, Vercel builds
 from the repository root and finds no Next.js app. One environment variable:
 
 | Variable | Value |
@@ -86,8 +86,8 @@ from the repository root and finds no Next.js app. One environment variable:
 | `NEXT_PUBLIC_API_URL` | `https://YOUR-API.up.railway.app` |
 
 It is `NEXT_PUBLIC_`, so it is compiled into the browser bundle. Changing it
-means redeploying, and it is readable by anyone who loads the page — which is
-fine, it is just the API's address, and the API is behind the password.
+means redeploying, and it is readable by anyone who loads the page. That is
+fine: it is just the API's address, and the API is behind the password.
 
 ## 4. Close the loop
 
@@ -111,7 +111,7 @@ development is unaffected.
 
 **It is a lock on the front door, not authentication.** Everyone who gets in
 shares one identity. The per-user namespaces behind it separate one browser from
-another, not one person from another — someone inside who knows another
+another, not one person from another: someone inside who knows another
 browser's profile id can read its material. Real auth means sessions and a user
 id derived from them, and is deliberately not what this is.
 
@@ -127,10 +127,10 @@ the stored one rejected, discards it, and prompts again.
 
 | | |
 |---|---|
-| Railway, 1–2 GB instance | roughly $5–10/month |
+| Railway, 1-2 GB instance | roughly $5-10/month |
 | Managed Postgres | free tier is enough for a demo |
 | Vercel | free tier |
-| Anthropic API | per course — see the cost breakdown in the README |
+| Anthropic API | per course; see the cost breakdown in the README |
 
 The API instance is the only fixed cost, and it exists because the models run
 locally.

@@ -7,7 +7,7 @@ lets generation finish in the background after you leave the page.
 ## Setup
 
 ```bash
-# from repo root — API (--reload-dir src avoids .venv reloads mid-generation)
+# from repo root: API (--reload-dir src avoids .venv reloads mid-generation)
 docker compose up -d
 uv run uvicorn notekit.api:app --reload --reload-dir src --port 8000
 

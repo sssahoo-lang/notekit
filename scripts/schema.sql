@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS style_profiles (
 );
 
 -- Finished courses, so reopening the UI does not regenerate (and re-bill).
--- user_id is trust-based, same model as uploads — isolation, not auth.
+-- user_id is trust-based, same model as uploads: isolation, not auth.
 CREATE TABLE IF NOT EXISTS courses (
     id                  BIGSERIAL PRIMARY KEY,
     user_id             TEXT NOT NULL DEFAULT '',
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS courses (
     -- Clean library label, and course length for a reading estimate.
     title               TEXT,
     word_count          INT NOT NULL DEFAULT 0,
-    -- generating | complete | partial — so History can show in-flight courses.
+    -- generating | complete | partial, so History can show in-flight courses.
     generation_status   TEXT NOT NULL DEFAULT 'complete',
     -- Planner output kept so a partial course can resume without re-planning.
     syllabus            JSONB

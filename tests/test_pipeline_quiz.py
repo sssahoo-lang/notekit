@@ -1,6 +1,6 @@
 """parse_quiz reads a fixed plain-text layout rather than requesting structured
 output, because structured output changes the request prefix and breaks
-prompt-cache reuse with the notes call (see the README's engineering notes —
+prompt-cache reuse with the notes call (see the README's engineering notes;
 this was a real $0.658 -> $0.339 fix). The parser has to be strict: `None`
 signals "fall back to the structured-output path", so a false positive here
 is worse than a false negative."""
@@ -73,7 +73,7 @@ def test_why_is_optional():
 
 def test_missing_option_fails_the_whole_parse():
     # A block with an empty option is exactly the kind of malformed output the
-    # structured-output fallback exists for — returning a partial quiz would
+    # structured-output fallback exists for. Returning a partial quiz would
     # be worse than falling back.
     broken = ONE_QUESTION.replace("B) The action-value function", "B)")
     assert parse_quiz(broken) is None

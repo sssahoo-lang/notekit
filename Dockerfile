@@ -1,7 +1,7 @@
 # Production image for the NoteKit API.
 #
 # The embedding and reranking models run locally, which is what keeps this on a
-# single API key — and what makes the image large. Two things follow:
+# single API key, and what makes the image large. Two things follow:
 #
 #   * The CPU-only torch build is installed explicitly. The default wheel pulls
 #     CUDA libraries worth well over a gigabyte that will never be used on a
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # The user is created before anything is copied so ownership can be set during
 # COPY. A `chown -R` afterwards rewrites every file's metadata and duplicates
-# the whole venv into a second layer — measured at 1.73GB on top of the 1.5GB
+# the whole venv into a second layer, measured at 1.73GB on top of the 1.5GB
 # it was copying.
 RUN useradd --create-home --uid 10001 notekit
 
@@ -66,7 +66,7 @@ COPY --chown=notekit:notekit evalsets ./evalsets
 COPY --chown=notekit:notekit fixtures ./fixtures
 
 # /app itself is created by WORKDIR and stays root-owned, so the cache
-# directory has to be made writable explicitly — the model download below runs
+# directory has to be made writable explicitly. The model download below runs
 # as notekit and cannot create it otherwise.
 RUN mkdir -p ${HF_HOME} && chown -R notekit:notekit /app/.cache
 
