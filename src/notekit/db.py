@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 from collections.abc import Iterator
 
 import psycopg
@@ -47,24 +48,67 @@ def topic_is_ingested(
 def clear_topic_cache(conn: psycopg.Connection, slug: str) -> None:
     """Forget that a topic was ingested so the next run fetches again."""
     conn.execute(
-        "UPDATE topics SET ingested_at = NULL WHERE slug = %s",
+        "UPDATE topics SET ingested_at = NULL, ingested_queries = NULL WHERE slug = %s",
         (slug,),
     )
 
 
+def ensure_query_column(conn: psycopg.Connection) -> None:
+    """Added after the table shipped, so an ALTER rather than a column above."""
+    conn.execute(
+        "ALTER TABLE topics ADD COLUMN IF NOT EXISTS ingested_queries JSONB"
+    )
+
+
+def topic_queries(conn: psycopg.Connection, slug: str) -> set[str]:
+    """The queries this topic's corpus has actually been fetched for.
+
+    A topic being "ingested" says nothing about which questions the corpus can
+    answer. The second course on a subject gets a different syllabus, and any
+    module whose query was never run is asking of a corpus that was never
+    built for it. That section then refuses, correctly and uselessly.
+    """
+    ensure_query_column(conn)
+    row = conn.execute(
+        "SELECT ingested_queries FROM topics WHERE slug = %s", (slug,)
+    ).fetchone()
+    stored = (row or {}).get("ingested_queries") or []
+    return {normalise_query(q) for q in stored}
+
+
+def normalise_query(query: str) -> str:
+    """Compare queries by content, not by incidental spacing or case."""
+    return " ".join(query.lower().split())
+
+
 def mark_topic_ingested(
-    conn: psycopg.Connection, slug: str, namespace: str, raw_goal: str
+    conn: psycopg.Connection,
+    slug: str,
+    namespace: str,
+    raw_goal: str,
+    queries: list[str] | None = None,
 ) -> None:
+    """Record that a topic was fetched, and for which queries.
+
+    Queries accumulate rather than replace: a corpus built for four module
+    queries and later topped up for a fifth can answer all five, and forgetting
+    the first four would make every later course refetch them.
+    """
+    ensure_query_column(conn)
+    merged = topic_queries(conn, slug) | {
+        normalise_query(q) for q in (queries or []) if q.strip()
+    }
     conn.execute(
         """
-        INSERT INTO topics (slug, namespace, raw_goal, ingested_at)
-        VALUES (%s, %s, %s, now())
+        INSERT INTO topics (slug, namespace, raw_goal, ingested_at, ingested_queries)
+        VALUES (%s, %s, %s, now(), %s::jsonb)
         ON CONFLICT (slug) DO UPDATE SET
             ingested_at = now(),
             namespace = EXCLUDED.namespace,
-            raw_goal = EXCLUDED.raw_goal
+            raw_goal = EXCLUDED.raw_goal,
+            ingested_queries = EXCLUDED.ingested_queries
         """,
-        (slug, namespace, raw_goal),
+        (slug, namespace, raw_goal, json.dumps(sorted(merged))),
     )
 
 

@@ -85,8 +85,22 @@ def ingest_topic(
             conn, slug, max_age_days=max_age
         ):
             stats = db.namespace_stats(conn, namespace)
-            if int(stats["chunks"] or 0) > 0:
+            # A cached topic is only usable for the questions it was built to
+            # answer. The second course on a subject gets a different syllabus,
+            # and a module whose query never ran is asking of a corpus that was
+            # never fetched for it: it refuses, correctly and uselessly. Those
+            # queries are fetched now, and only those, so a cache hit stays a
+            # cache hit for everything already covered.
+            done = db.topic_queries(conn, slug)
+            unfetched = [q for q in queries if db.normalise_query(q) not in done]
+            if int(stats["chunks"] or 0) > 0 and not unfetched:
                 return {"cached": True, **stats}
+            if int(stats["chunks"] or 0) > 0:
+                queries = unfetched
+                print(
+                    f"Corpus exists but was never fetched for "
+                    f"{len(unfetched)} of its queries; topping up."
+                )
             # Cache row exists but the namespace is empty, so treat it as a miss.
             db.clear_topic_cache(conn, slug)
             conn.commit()
@@ -145,7 +159,7 @@ def ingest_topic(
         stats = db.namespace_stats(conn, namespace)
         # Never cache an empty corpus, which would permanently block re-ingest.
         if int(stats["chunks"] or 0) > 0:
-            db.mark_topic_ingested(conn, slug, namespace, raw_goal)
+            db.mark_topic_ingested(conn, slug, namespace, raw_goal, queries)
         else:
             db.clear_topic_cache(conn, slug)
         conn.commit()

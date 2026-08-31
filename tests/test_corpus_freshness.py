@@ -10,13 +10,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from notekit import cli, config, ingest
+from notekit import cli, config, db, ingest
 
 
 class FakeDb:
     """Just enough of db.py to reach the cache decision and stop."""
 
     def __init__(self, *, ingested=True, populated=True, chunks=5):
+        self.asked_queries: set[str] = set()
         self.ingested = ingested
         self.populated = populated
         self.chunks = chunks
@@ -32,6 +33,14 @@ class FakeDb:
         self.asked_max_age = max_age_days
         return self.ingested
 
+    def topic_queries(self, conn, slug):
+        # These tests are about age, not query coverage, so the corpus is
+        # treated as already fetched for whatever it is asked. Coverage has
+        # its own file.
+        return self.asked_queries
+
+    normalise_query = staticmethod(db.normalise_query)
+
     def namespace_stats(self, conn, namespace):
         return {"chunks": self.chunks, "documents": 1}
 
@@ -43,6 +52,9 @@ class FakeDb:
 
     def clear_topic_cache(self, conn, slug):
         self.cleared_cache = True
+
+    def mark_topic_ingested(self, conn, slug, namespace, raw_goal, queries=None):
+        pass
 
 
 class Unreachable:
@@ -57,6 +69,7 @@ class Unreachable:
 
 
 def run(monkeypatch, fake, **kwargs):
+    fake.asked_queries = {db.normalise_query("q-learning")}
     monkeypatch.setattr(ingest, "db", fake)
     monkeypatch.setitem(ingest.REGISTRY, "unreachable", Unreachable())
     return ingest.ingest_topic(
