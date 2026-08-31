@@ -1,0 +1,51 @@
+name: CI
+
+# Every check here runs offline. The test suite never reaches Postgres or the
+# Anthropic API, so CI needs no services and no secrets, and a fork's pull
+# request runs exactly what a maintainer's does.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.11
+      # --frozen fails on a stale uv.lock rather than quietly resolving
+      # something the developer never ran.
+      - name: Install
+        run: uv sync --frozen --group dev
+      - name: Test
+        run: uv run pytest -q
+
+  web:
+    name: Web typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Unit tests
+        run: npm run test
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npx eslint src
+      # The build is the real check on the App Router boundaries: a client hook
+      # in a server component typechecks and then fails here.
+      - name: Build
+        run: npm run build
