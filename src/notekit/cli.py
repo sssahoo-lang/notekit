@@ -42,7 +42,7 @@ def ingest_cmd(
     )
 
     if summary.get("cached"):
-        console.print(f"[yellow]Already ingested[/] — {summary['chunks']} chunks.")
+        console.print(f"[yellow]Already ingested[/]: {summary['chunks']} chunks.")
     else:
         console.print(
             f"[green]Indexed[/] {summary['new_documents']} documents, "
@@ -62,7 +62,7 @@ def search_cmd(
         raise typer.Exit(1)
 
     for c in chunks:
-        console.print(f"[bold cyan]{c.citation_key}[/] score={c.score:.2f} — {c.document_title}")
+        console.print(f"[bold cyan]{c.citation_key}[/] {c.document_title} (score {c.score:.2f})")
         console.print(f"  {c.text[:200].strip()}...\n")
 
 
@@ -135,7 +135,10 @@ def course_cmd(
         console.print("\n[dim]Sources cited:[/]")
         for chunk_id in module.cited_chunk_ids:
             c = sources[chunk_id]
-            console.print(f"  [cyan]{c.citation_key}[/] {c.document_title} — {c.document_url}")
+            console.print(
+                f"  [cyan]{c.citation_key}[/] {c.document_title} "
+                f"[dim]{c.document_url}[/]"
+            )
         console.print()
 
         if module.quiz:
@@ -292,7 +295,7 @@ def calibrate_cmd(
 ) -> None:
     """Find the refusal threshold that best separates covered from uncovered.
 
-    Needs no API key — retrieval and reranking are local. Pass --apply to write
+    Needs no API key: retrieval and reranking are local. Pass --apply to write
     the suggested value for the API and future CLI runs.
     """
     report = calibration.calibrate(
@@ -306,12 +309,12 @@ def calibrate_cmd(
         table.add_row(
             p.query[:52],
             "covered" if p.expected_covered else "uncovered",
-            f"{p.top_score:.2f}" if p.top_score is not None else "—",
+            f"{p.top_score:.2f}" if p.top_score is not None else "n/a",
         )
     console.print(table)
 
     if report.suggested_threshold is None:
-        console.print("[red]No scores returned — is the namespace ingested?[/]")
+        console.print("[red]No scores returned. Is the namespace ingested?[/]")
         raise typer.Exit(1)
 
     console.print(
@@ -331,8 +334,8 @@ def calibrate_cmd(
         console.print("[green]Covered and uncovered questions separate cleanly.[/]")
     else:
         console.print(
-            "[yellow]No threshold separates them perfectly — "
-            "the overlapping questions are worth reading.[/]"
+            "[yellow]No threshold separates them perfectly. "
+            "The overlapping questions are worth reading.[/]"
         )
 
 
@@ -407,14 +410,14 @@ def eval_cmd(
         table.add_column(column)
     for r in results:
         if r.refused:
-            table.add_row(r.module_title[:34], "—", "—", "[yellow]refused[/]", "—")
+            table.add_row(r.module_title[:34], "n/a", "n/a", "[yellow]refused[/]", "n/a")
             continue
         table.add_row(
             r.module_title[:34],
             str(len(r.claims)),
             str(sum(c.supported for c in r.claims)),
-            f"{r.faithfulness:.0%}" if r.faithfulness is not None else "—",
-            f"{r.coverage_score:.0%}" if r.coverage_score is not None else "—",
+            f"{r.faithfulness:.0%}" if r.faithfulness is not None else "n/a",
+            f"{r.coverage_score:.0%}" if r.coverage_score is not None else "n/a",
         )
     console.print(table)
 
@@ -464,12 +467,12 @@ def sweep_cmd(
 
     console.print(
         f"[dim]{len(configs)} configurations x {repeat} run(s) on "
-        f"'{namespace}' — about {len(configs) * repeat} courses[/]\n"
+        f"'{namespace}', about {len(configs) * repeat} courses[/]\n"
     )
 
     def progress(r: sweep.ConfigResult) -> None:
         if r.skipped:
-            console.print(f"  [yellow]{r.name}[/] skipped — {r.skipped}")
+            console.print(f"  [yellow]{r.name}[/] skipped: {r.skipped}")
         else:
             f = r.faithfulness
             console.print(
@@ -492,12 +495,12 @@ def sweep_cmd(
         table.add_column(column)
     for r in results:
         if r.skipped:
-            table.add_row(r.name, "—", "—", "—", "—")
+            table.add_row(r.name, "n/a", "n/a", "n/a", "n/a")
             continue
         table.add_row(
             r.name,
-            f"{r.faithfulness:.1%}" if r.faithfulness is not None else "—",
-            f"{r.spread * 100:.1f} pts" if r.spread is not None else "—",
+            f"{r.faithfulness:.1%}" if r.faithfulness is not None else "n/a",
+            f"{r.spread * 100:.1f} pts" if r.spread is not None else "n/a",
             str(r.claims),
             f"${r.cost_usd:.2f}",
         )
@@ -518,7 +521,7 @@ def sweep_cmd(
             console.print(
                 "[yellow]One run per configuration measures no noise, so this "
                 "ordering is not evidence. Repeated runs of a single "
-                "configuration on this fixture have varied by 4.6 points — "
+                "configuration on this fixture have varied by 4.6 points, "
                 "wider than most gaps above. Use --repeat 3 or more before "
                 "concluding anything.[/]"
             )
@@ -527,7 +530,7 @@ def sweep_cmd(
             if spread <= within:
                 console.print(
                     "[yellow]The gap between configurations does not exceed the "
-                    "noise within one — this does not distinguish them. Raise "
+                    "noise within one, so this does not distinguish them. Raise "
                     "--repeat further before drawing a conclusion.[/]"
                 )
     for r in results:
@@ -553,7 +556,7 @@ def topics_cmd(
         )
         console.print(
             f"{parts[0]} vs {parts[1]}: [bold]{score:.3f}[/] "
-            f"(threshold {topics.MERGE_THRESHOLD}) — {verdict}"
+            f"(threshold {topics.MERGE_THRESHOLD}): {verdict}"
         )
         return
 
@@ -573,7 +576,7 @@ def topics_cmd(
         alias = r["slug"] != r["namespace"]
         table.add_row(
             f"{'└ ' if alias else ''}{r['slug']}",
-            "[dim]— same[/]" if alias else r["namespace"],
+            "[dim]same[/]" if alias else r["namespace"],
             "" if alias else str(r["chunks"]),
         )
     console.print(table)
@@ -600,8 +603,8 @@ def _print_spread(runs: list) -> None:
         table.add_row(
             str(i),
             str(summary["claims"]),
-            f"{summary['faithfulness']:.1%}" if summary["faithfulness"] else "—",
-            f"{summary['coverage']:.1%}" if summary["coverage"] else "—",
+            f"{summary['faithfulness']:.1%}" if summary["faithfulness"] else "n/a",
+            f"{summary['coverage']:.1%}" if summary["coverage"] else "n/a",
         )
     console.print(table)
 
@@ -614,7 +617,7 @@ def _print_spread(runs: list) -> None:
         console.print(
             f"[bold]{label}[/] {mean:.1%} "
             # spread is a fraction; percentage points need the x100.
-            f"(range {min(values):.1%}–{max(values):.1%}, spread {spread * 100:.1f} pts)"
+            f"(range {min(values):.1%}-{max(values):.1%}, spread {spread * 100:.1f} pts)"
         )
 
 
@@ -667,7 +670,7 @@ def courses_cmd(
 def export_cmd(
     course_id: int = typer.Argument(..., help="Course id, from `notekit courses`"),
     to: Path = typer.Option(
-        ..., "--to", help="Folder to write into — an Obsidian vault, or anywhere"
+        ..., "--to", help="Folder to write into: an Obsidian vault, or anywhere"
     ),
 ) -> None:
     """Write a saved course out as Markdown notes. Needs no API key."""
@@ -678,7 +681,7 @@ def export_cmd(
 
     result = vault.export_course(course, to)
     console.print(
-        f"[green]Exported[/] {course.get('title') or course.get('goal')} — "
+        f"[green]Exported[/] {course.get('title') or course.get('goal')}: "
         f"{result.file_count} notes"
     )
     console.print(f"  [dim]{result.folder}[/]")

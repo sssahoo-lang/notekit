@@ -9,7 +9,7 @@ trace to one source shows up as a node with a single inbound edge, which is
 the kind of thing the web reader cannot show you.
 
 Nothing here calls a model or touches retrieval. It reads a saved course and
-writes files, so the formatting is deterministic and testable on its own — the
+writes files, so the formatting is deterministic and testable on its own: the
 functions that build note text take plain dicts and return strings, and only
 `export_course` touches the filesystem.
 """
@@ -135,8 +135,8 @@ def rewrite_citations(
     that citations should not fight the prose (hence superscripts in the web
     UI), and a footnote marker is the Markdown equivalent of a superscript.
 
-    A marker whose chunk is not in the course — a hallucinated id, or one
-    dropped when the course was slimmed — is left as literal text rather than
+    A marker whose chunk is not in the course (a hallucinated id, or one
+    dropped when the course was slimmed) is left as literal text rather than
     turned into a footnote that resolves to nothing. Better a visible oddity
     than a silent dangling reference.
     """
@@ -174,7 +174,7 @@ def _quiz_block(
     it degrades to an ordinary blockquote, which is still readable.
 
     Explanations carry `[c123]` markers just as the prose does, so they get the
-    same footnote treatment — `used` is appended to in place so their sources
+    same footnote treatment. `used` is appended to in place so their sources
     reach the footnote block at the bottom of the note.
     """
     if not quiz or not quiz.get("questions"):

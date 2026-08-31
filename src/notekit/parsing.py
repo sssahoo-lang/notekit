@@ -184,7 +184,7 @@ def chunk(text: str, cfg: config.RetrievalConfig) -> list[str]:
             _pack_units(paragraphs, cfg=cfg, target=target, overlap=overlap)
         )
 
-    # Drop fragments too short to support a claim — usually stray headers.
+    # Drop fragments too short to support a claim, usually stray headers.
     kept: list[str] = []
     for c in chunks:
         if embedding.count_tokens(c, cfg) >= min_tokens:

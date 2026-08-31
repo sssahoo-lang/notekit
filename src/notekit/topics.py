@@ -42,7 +42,7 @@ def ensure_table(conn) -> None:
 
 
 def _phrase(slug: str, label: str | None = None) -> str:
-    """What actually gets embedded — the readable form, not the slug."""
+    """What actually gets embedded: the readable form, not the slug."""
     return (label or slug).replace("-", " ").strip().lower()
 
 

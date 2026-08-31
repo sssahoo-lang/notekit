@@ -2,14 +2,14 @@
 
 A learner reads their own phrasing faster than generic explanatory prose. This
 module learns how someone writes from a sample, then applies that to any course
-they generate — whether it is built from their uploaded PDFs, from arXiv, or
+they generate, whether it is built from their uploaded PDFs, from arXiv, or
 from Wikipedia. Style and corpus are separate concerns.
 
 The safety property: a `StyleProfile` describes *form only*. It never carries
 subject matter, and the writing sample is not stored or sent at generation time.
 Pasting a user's raw notes into the generation prompt as a style exemplar would
 put content-shaped text beside the retrieved passages, and the model would
-eventually assert things from it — the exact failure faithfulness exists to
+eventually assert things from it, the exact failure faithfulness exists to
 catch. A structured description of form cannot do that.
 """
 
@@ -37,7 +37,7 @@ content (e.g. "explains gradient descent with metaphors" is forbidden; \
 "opens with a one-line definition before elaborating" is allowed).
 
 For signature_habits, give two to five observable formatting and phrasing \
-patterns — not the subject those habits were applied to."""
+patterns, not the subject those habits were applied to."""
 
 
 class StyleProfile(BaseModel):
@@ -55,7 +55,7 @@ class StyleProfile(BaseModel):
         description="Two to five observable habits of form, no subject matter"
     )
     summary: str = Field(
-        description="Two sentences on how this person writes. Form only — zero topics."
+        description="Two sentences on how this person writes. Form only, zero topics."
     )
 
     def as_instruction(self) -> str:
@@ -74,7 +74,7 @@ class StyleProfile(BaseModel):
         habits = "\n".join(f"- {h}" for h in self.signature_habits)
         return (
             "Write in the reader's own style, described below. This governs "
-            "form only — it changes how you write, never what you may assert. "
+            "form only: it changes how you write, never what you may assert. "
             "Every grounding and citation rule still applies exactly as stated. "
             "If this profile asks for analogies or worked examples, use them "
             "only when the source passages themselves support them; never invent "

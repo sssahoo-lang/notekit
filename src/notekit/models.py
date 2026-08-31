@@ -25,7 +25,7 @@ class Module(BaseModel):
         description=(
             "Two to four observable outcomes after this module, matching the "
             "inferred learner level. Prefer verbs like define, derive, compare, "
-            "apply, diagnose — not vague topics like 'know about X'."
+            "apply, diagnose, rather than vague topics like 'know about X'."
         )
     )
 
@@ -38,7 +38,7 @@ class Syllabus(BaseModel):
         description=(
             "A short title for the course, three to six words, in sentence "
             "case. This is what the learner sees in their library, so it must "
-            "read cleanly on its own — do not echo their phrasing or typos."
+            "read cleanly on its own. Do not echo their phrasing or typos."
         )
     )
     topic_slug: str = Field(

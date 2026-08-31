@@ -2,7 +2,7 @@
 
 The same core engine serves this and the open-domain adapters: files become
 chunks in a namespace, and retrieval and generation never learn where they came
-from. What differs is isolation — uploaded material is private, so it goes into
+from. What differs is isolation: uploaded material is private, so it goes into
 a namespace no other user's course can retrieve from.
 """
 
@@ -26,8 +26,8 @@ class UnsupportedFile(Exception):
 
 def user_namespace(user_id: str, topic: str = "notes") -> str:
     """Namespace uploads per user so one person's files cannot leak into
-    another's course. There is no auth yet, so `user_id` is taken on trust —
-    this is isolation, not access control, and the README says so."""
+    another's course. There is no auth yet, so `user_id` is taken on trust.
+    This is isolation, not access control, and the README says so."""
     safe_user = normalize(user_id)
     safe_topic = normalize(topic)
     if safe_user == ANONYMOUS and not (user_id or "").strip():
@@ -36,7 +36,7 @@ def user_namespace(user_id: str, topic: str = "notes") -> str:
 
 
 def content_hash(data: bytes) -> str:
-    """Stable id for file bytes — survives temp-path uploads and renames."""
+    """Stable id for file bytes, which survives temp-path uploads and renames."""
     return hashlib.sha256(data).hexdigest()
 
 
@@ -142,7 +142,7 @@ def ingest_files(
             ).fetchone()["n"]
 
             if not created and int(existing_chunks) > 0:
-                # Same content hash already indexed — keep existing chunks.
+                # Same content hash already indexed, so keep the existing chunks.
                 # (Hash is of file bytes, so content cannot have changed.)
                 skipped.append(f"{path.name}: already indexed in this namespace")
                 continue

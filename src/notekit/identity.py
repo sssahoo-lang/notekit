@@ -2,7 +2,7 @@
 
 Identity used to be whatever string the caller typed, matched exactly. "Ria
 Butt", "ria butt" and "Ria  Butt" were three different people with three empty
-histories, and uploads sanitised the name while courses stored it raw — so the
+histories, and uploads sanitised the name while courses stored it raw, so the
 same person had two identities depending on which feature they used.
 
 Everything that keys on a user goes through `normalize` now.

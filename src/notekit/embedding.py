@@ -17,14 +17,14 @@ from . import config
 # and warns (or deadlocks) on macOS.
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-# Torch is not thread-safe here for either construction or inference — four
+# Torch is not thread-safe here for either construction or inference: four
 # module threads hitting it concurrently segfaults the interpreter on macOS.
 # One lock guards both.
 #
 # This serialises retrieval across modules, which costs little: a query embed
 # plus a rerank of ~40 pairs is well under a second, while the generation call
-# it feeds is tens of seconds. The parallelism that matters — the Claude API
-# calls — is untouched.
+# it feeds is tens of seconds. The parallelism that matters, the Claude API
+# calls, is untouched.
 _load_lock = threading.Lock()
 
 
@@ -88,7 +88,7 @@ def embed_query(text: str, cfg: config.RetrievalConfig) -> list[float]:
 def rerank(query: str, passages: list[str], cfg: config.RetrievalConfig) -> list[float]:
     """Cross-encoder relevance scores, one per passage. Higher is better.
 
-    Scores are unbounded logits, not probabilities — that is why
+    Scores are unbounded logits, not probabilities, which is why
     REFUSAL_SCORE_THRESHOLD is a negative number and needs calibrating.
     """
     if not cfg.rerank_model or not passages:

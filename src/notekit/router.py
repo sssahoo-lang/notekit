@@ -6,7 +6,7 @@ searching them anyway costs a round trip and pollutes the corpus with
 low-scoring chunks the reranker then has to discard.
 
 The router classifies the subject once per topic and picks adapters from that.
-Wikipedia is always included — it is the only source that covers foundations
+Wikipedia is always included: it is the only source that covers foundations
 across every domain, and the milestone-1 finding was that arXiv alone cannot
 teach basics because it indexes the research frontier rather than pedagogy.
 """

@@ -1,7 +1,7 @@
 """Cold lane: fetch, parse, chunk, embed, store.
 
 Nothing here is on the user-facing critical path. It runs once per topic and
-every later course on that topic is a cache hit — but only when the namespace
+every later course on that topic is a cache hit, but only when the namespace
 actually has searchable chunks.
 """
 
@@ -54,7 +54,7 @@ def ingest_topic(
             stats = db.namespace_stats(conn, namespace)
             if int(stats["chunks"] or 0) > 0:
                 return {"cached": True, **stats}
-            # Cache row exists but the namespace is empty — treat as a miss.
+            # Cache row exists but the namespace is empty, so treat it as a miss.
             db.clear_topic_cache(conn, slug)
             conn.commit()
 
@@ -72,7 +72,7 @@ def ingest_topic(
                     fetched.append((adapter.name, doc))
             except Exception as exc:  # noqa: BLE001
                 # One unreachable source should not lose the material from the
-                # others — a partial corpus still produces grounded notes.
+                # others. A partial corpus still produces grounded notes.
                 print(f"  ! {name} failed on '{q[:40]}': {exc}")
 
     total_chunks = 0
@@ -110,7 +110,7 @@ def ingest_topic(
             print(f"  + [{source_name}] {doc.title[:52]} ({len(texts)} chunks)")
 
         stats = db.namespace_stats(conn, namespace)
-        # Never cache an empty corpus — that permanently blocks re-ingest.
+        # Never cache an empty corpus, which would permanently block re-ingest.
         if int(stats["chunks"] or 0) > 0:
             db.mark_topic_ingested(conn, slug, namespace, raw_goal)
         else:

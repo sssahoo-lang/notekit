@@ -3,8 +3,8 @@
 A straight line of plan → gather → write does not need a graph; a for-loop
 expresses it better and this project ran that way for a long time. What earns
 the graph is the failure we actually hit: build a course on a corpus that turns
-out to be thin, and modules refuse — correctly, but leaving the reader with a
-mostly empty course and no recourse.
+out to be thin, and modules refuse. That is correct, but it leaves the reader
+with a mostly empty course and no recourse.
 
 So the graph branches. After writing, it counts refusals: if too many sections
 had nothing to work from and there is an attempt left, it routes to a node that
@@ -12,7 +12,7 @@ widens the corpus using the refused sections' own queries, then rewrites only
 those sections. Otherwise it finishes. That is a decision made from the state of
 the run, which is the thing a graph is for.
 
-The streaming API path keeps its own orchestration — it has to emit tokens as
+The streaming API path keeps its own orchestration: it has to emit tokens as
 they arrive and cancel mid-flight, which this does not model. This runs the
 synchronous path used by the CLI and evaluation.
 """
@@ -128,7 +128,7 @@ def _should_broaden(state: CourseState) -> str:
     notes = state.get("notes", {})
     if not notes or state.get("attempts", 0) > MAX_BROADEN_ATTEMPTS:
         return "finish"
-    # An explicit namespace is the reader's own material — fetching more from
+    # An explicit namespace is the reader's own material, so fetching more from
     # the open web would silently break the promise that it used only their files.
     if state.get("namespace"):
         return "finish"

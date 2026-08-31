@@ -5,7 +5,7 @@ promising a faithfulness figure for each, and nothing ever ran them. This runs
 them.
 
 Only the retrieval half varies for free. A configuration that changes chunking
-needs its own index, because chunk size is decided at ingestion — those are
+needs its own index, because chunk size is decided at ingestion. Those are
 reported as needing a build rather than silently compared against an index built
 with different settings, which would attribute the difference to the wrong
 thing.

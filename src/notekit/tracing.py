@@ -4,7 +4,7 @@ Every model call in the project already funnels through `llm.py`, so tracing
 hooks in at one place. It is deliberately optional: without Langfuse keys the
 functions here are no-ops, because a missing observability backend must never
 stop someone studying. Failures inside tracing are swallowed for the same
-reason — a broken trace should not take down a course that was generating fine.
+reason: a broken trace should not take down a course that was generating fine.
 
 Set LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY and optionally LANGFUSE_HOST to
 turn it on.
@@ -41,7 +41,7 @@ def enabled() -> bool:
         )
         _enabled = True
     except Exception:  # noqa: BLE001
-        # Wrong version, unreachable host, bad keys — none of it is worth
+        # Wrong version, unreachable host, bad keys: none of it is worth
         # failing a course over.
         _enabled = False
     return _enabled

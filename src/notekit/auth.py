@@ -2,7 +2,7 @@
 
 This is a lock on the front door, not authentication. Everyone who gets in
 shares one identity, so the per-user namespaces behind it are isolation between
-browsers, not between people — someone who is inside and knows another
+browsers, not between people: someone who is inside and knows another
 browser's profile id can still read its material. Real auth means sessions and
 a user id derived from them, and is deliberately not what this is.
 

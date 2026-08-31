@@ -1,8 +1,8 @@
 """Side lane: does the generated text actually follow from its sources?
 
-Faithfulness is measured the way Ragas measures it — decompose the notes into
+Faithfulness is measured the way Ragas measures it (decompose the notes into
 atomic claims, then check each claim for entailment against the retrieved
-passages — but implemented directly here rather than through the library. Two
+passages), but implemented directly here rather than through the library. Two
 reasons: Ragas routes through LangChain and defaults to OpenAI, which would add
 a second provider to a project that deliberately has one; and an eval whose
 scoring is a black box undercuts the point of the project. Every judgement here
@@ -30,7 +30,7 @@ alone without surrounding context.
 
 Ignore citation markers like [c123]. Ignore fenced Mermaid diagram source \
 (code between ```mermaid and ```). Ignore sentences that make no factual \
-assertion — transitions, hedges with no content, or restatements of the module \
+assertion: transitions, hedges with no content, or restatements of the module \
 title. Keep paraphrases of definitions, mechanisms, numbers, and examples."""
 
 _VERDICT_SYSTEM = """You check whether claims are entailed by source passages.
@@ -126,8 +126,8 @@ _SEQ_EDGE = re.compile(r"([A-Za-z0-9_]+)\s*-[->x)]{1,3}\s*([A-Za-z0-9_]+)\s*:\s*
 def diagram_claims(body: str) -> list[str]:
     """Turn Mermaid diagrams into checkable sentences.
 
-    A diagram asserts things — every arrow is a claim about how two ideas
-    relate — but the claim extractor is told to skip fenced source, so those
+    A diagram asserts things (every arrow is a claim about how two ideas
+    relate), but the claim extractor is told to skip fenced source, so those
     assertions were never scored. Converting them here is deterministic: no
     extra model call, and the wording stays close to what the diagram draws.
     """
@@ -245,7 +245,7 @@ def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
 def evaluate_course(
     notes: list[ModuleNotes], modules: list[Module]
 ) -> list[ModuleEval]:
-    """Score every module. Runs concurrently — this lane blocks nobody."""
+    """Score every module. Runs concurrently, so this lane blocks nobody."""
     with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_MODULES) as pool:
         return list(pool.map(evaluate_module, notes, modules))
 

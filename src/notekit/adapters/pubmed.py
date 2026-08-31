@@ -1,8 +1,8 @@
 """PubMed adapter: biomedical literature via NCBI E-utilities.
 
 Abstracts only, deliberately. Full text lives behind PubMed Central and varies
-by licence, and an abstract is dense, self-contained and written to stand alone
-— which is closer to what a study note needs than a methods section is.
+by licence, and an abstract is dense, self-contained and written to stand
+alone, which is closer to what a study note needs than a methods section is.
 """
 
 from __future__ import annotations

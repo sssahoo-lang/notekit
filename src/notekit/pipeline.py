@@ -30,10 +30,10 @@ Given a learning goal:
 1. Infer the learner level (beginner, intermediate, or advanced) from how they \
 phrased the goal. Encode that level in the module learning goals and in the \
 course summary.
-2. Produce 3–5 modules that build on each other. Prerequisites come first; \
+2. Produce 3-5 modules that build on each other. Prerequisites come first; \
 later modules assume earlier ones.
 3. For each module, write a retrieval `query` in the language of academic \
-source material — named methods, definitions, equations, and field terms. \
+source material: named methods, definitions, equations, and field terms. \
 Never write queries as learner requests ("teach me…", "explain…", "help me \
 understand…").
 4. Learning goals must be observable skills (define, derive, compare, apply, \
@@ -47,8 +47,8 @@ The syllabus must be teachable from Wikipedia- and paper-like sources. Prefer \
 concepts that have stable, citable treatments over ephemeral or purely \
 opinionated topics."""
 
-# Shared by the notes and quiz calls. Both must send an identical prefix —
-# system text plus the cached passages block — or the quiz call cannot read the
+# Shared by the notes and quiz calls. Both must send an identical prefix
+# (system text plus the cached passages block) or the quiz call cannot read the
 # cache the notes call wrote. Task-specific instructions therefore live in the
 # user turn, after the cached block, not here.
 _GROUNDING_SYSTEM = """You work strictly from the provided source passages.
@@ -56,7 +56,7 @@ _GROUNDING_SYSTEM = """You work strictly from the provided source passages.
 Rules, in order of importance:
 
 1. Every factual claim must be entailed by one or more numbered passages. If \
-a passage does not support a claim, do not make it — including definitions, \
+a passage does not support a claim, do not make it. This includes definitions, \
 examples, analogies, and "as is well known" filler.
 2. Cite the supporting passage inline as [c123] using only ids that appear in \
 the passages block. Cite every factual sentence. Multiple citations per \
@@ -116,7 +116,7 @@ Caption: Q-learning interaction loop [c12]."""
 _QUIZ_TASK = """Write {n} multiple-choice questions that test this module.
 
 Question quality:
-- Probe concepts, relationships, or procedures supported by the passages — not \
+- Probe concepts, relationships, or procedures supported by the passages, not \
 trivia, wording recall, or trivia about citation ids.
 - Exactly one correct option, fully determined by the passages.
 - The three wrong options must be plausible but false given the passages. Do \
@@ -168,7 +168,7 @@ def parse_quiz(text: str) -> Quiz | None:
 
 
 def plan_syllabus(goal: str) -> Syllabus:
-    """Entry node. One structured call — canonical slug plus module breakdown."""
+    """Entry node. One structured call: canonical slug plus module breakdown."""
     return llm.parse(
         model=config.PLANNER_MODEL,
         system=_PLANNER_SYSTEM,
@@ -274,7 +274,7 @@ def generate_module_notes(
     retrieved_ids = {c.id for c in chunks}
     cited = [int(m) for m in _CITATION.findall(body)]
     # A citation pointing outside the retrieved set is a hard bug, not a scoring
-    # question — surface it rather than letting the eval layer find it later.
+    # question, so surface it rather than letting the eval layer find it later.
     invalid = sorted(set(cited) - retrieved_ids)
     if invalid:
         raise RuntimeError(f"Notes cited chunks that were never retrieved: {invalid}")
@@ -488,7 +488,7 @@ async def arun_course_events(
     GIL and staggered each other's first token by seconds; coroutines do not.
 
     `cancel_event` stops workers when set (explicit Stop). Leaving the SSE
-    stream does not set it — background jobs keep writing.
+    stream does not set it; background jobs keep writing.
 
     `only_indices` regenerates a subset (resume of a partial course).
     """
@@ -634,7 +634,7 @@ def run_course(
     syllabus = syllabus or plan_syllabus(goal)
 
     # An explicit namespace means "build this course only from what is already
-    # in here" — the uploaded-material path. Fetching from open sources would
+    # in here", the uploaded-material path. Fetching from open sources would
     # defeat the point, so it is skipped.
     if namespace:
         skip_ingest = True

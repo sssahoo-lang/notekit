@@ -122,7 +122,7 @@ def site_login(request: PasswordRequest) -> dict:
 
 @app.get("/api/auth")
 def site_auth_required() -> dict:
-    """Whether this instance is gated — lets the UI decide to show a prompt."""
+    """Whether this instance is gated, so the UI can decide to show a prompt."""
     return {"required": auth.enabled()}
 
 # The Next.js dev server runs on 3000. Deployment will need the real origin
@@ -211,8 +211,8 @@ async def _sse(events: AsyncIterator[dict]) -> AsyncIterator[str]:
     Starlette hop to a worker thread for every single item, which for
     token-level output is thousands of hops per course.
 
-    A failure mid-stream cannot become an HTTP error status — headers are long
-    gone — so it is delivered as a terminal error event instead.
+    A failure mid-stream cannot become an HTTP error status (headers are long
+    gone), so it is delivered as a terminal error event instead.
     """
     try:
         async for event in events:
@@ -422,7 +422,7 @@ async def _subscribe_events(job: _CourseJob) -> AsyncIterator[dict]:
 async def _course_events_saving(request: CourseRequest) -> AsyncIterator[dict]:
     """Start a background course job and stream its events to this client.
 
-    Closing the SSE connection unsubscribes only — generation keeps going.
+    Closing the SSE connection unsubscribes only; generation keeps going.
     Call POST /api/courses/{id}/cancel to stop explicitly.
     """
     user_id = (request.user or "").strip() or "anonymous"

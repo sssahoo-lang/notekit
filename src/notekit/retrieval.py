@@ -1,6 +1,6 @@
 """Hybrid retrieval: dense + sparse, fused, then reranked.
 
-Reranking is both a quality and a latency lever here — tighter context means a
+Reranking is both a quality and a latency lever here: tighter context means a
 smaller generation prompt, so the eval story and the speed story point the same
 way rather than trading off.
 """

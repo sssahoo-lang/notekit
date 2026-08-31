@@ -1,7 +1,7 @@
 """Answering "what does this mean?" about a passage of generated notes.
 
 A reader who highlights a sentence they find hard gets an explanation drawn from
-the same source passages the notes were written from — never from the model's
+the same source passages the notes were written from, never from the model's
 own knowledge. Personalised, easier phrasing must not become a licence to
 invent: the grounding rule that governs the notes governs this too.
 
@@ -22,13 +22,13 @@ or paragraph the reader highlighted, and optionally their question.
 Rules:
 
 1. Answer only from the source passages. If they do not cover what the reader \
-asks, say plainly which part is missing — never fill the gap from your own \
+asks, say plainly which part is missing. Never fill the gap from your own \
 knowledge.
 2. Cite every supporting passage inline as [c123], using only the ids given.
 3. Be direct and short: a few sentences. Untangle the hard idea; do not \
 re-teach the whole module.
 4. Do not quote the highlighted text back before answering.
-5. If style guidance appears in the user turn, it changes phrasing only — it \
+5. If style guidance appears in the user turn, it changes phrasing only. It \
 does not license new facts."""
 
 
@@ -46,7 +46,7 @@ def explain(
     ask = (
         f"Their question: {question.strip()}"
         if question and question.strip()
-        else "They did not ask anything specific — they marked this as hard to follow."
+        else "They did not ask anything specific; they marked this as hard to follow."
     )
     style_instruction = f"\n\n{style.as_instruction()}" if style else ""
 
@@ -66,7 +66,7 @@ def explain(
 def passages_for_module(course: dict, module_index: int) -> tuple[str, bool]:
     """Rebuild the passage block for a saved module.
 
-    Returns the block and whether any passages were found — a refused module has
+    Returns the block and whether any passages were found. A refused module has
     retrieved chunks but no notes, and is still worth explaining from.
 
     Prefer hydrated `notes.chunks`; fall back to loading ids from Postgres when

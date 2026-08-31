@@ -1,7 +1,7 @@
 """Persisted course history so regenerated notes are not paid for twice.
 
 A finished course is stored as JSON (modules, citations, quiz) keyed by a
-trust-based user_id — the same isolation model as uploads, not real auth.
+trust-based user_id, the same isolation model as uploads, not real auth.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def ensure_table(conn) -> None:
 
 
 def word_count_of(modules: list[dict[str, Any]]) -> int:
-    """Words across every written section — the basis for a reading estimate."""
+    """Words across every written section, the basis for a reading estimate."""
     total = 0
     for module in modules:
         body = ((module.get("notes") or {}).get("body")) or ""
@@ -260,7 +260,7 @@ def abandon_stale_generating() -> int:
     """Mark in-flight courses as partial after a process restart.
 
     Generation jobs live in memory. Anything still `generating` when the API
-    starts cannot still be writing — leave History in an honest state.
+    starts cannot still be writing, so leave History in an honest state.
     """
     with db.connect() as conn:
         ensure_table(conn)

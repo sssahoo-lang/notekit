@@ -1,7 +1,7 @@
 """Wikipedia adapter: encyclopaedic material for foundational modules.
 
 arXiv indexes the research frontier, which makes it a poor source for "explain
-the basics of X" — see the milestone 1 finding in the README. Wikipedia covers
+the basics of X". See the milestone 1 finding in the README. Wikipedia covers
 exactly that gap, and needs no PDF parsing since the API returns plain text.
 """
 

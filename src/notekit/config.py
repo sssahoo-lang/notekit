@@ -3,7 +3,7 @@
 The model tiers below are the main cost lever. Generation runs on Sonnet 5;
 planning and evaluation run on Haiku 4.5, which is where most of the token
 volume lives. Point GENERATION_MODEL at "claude-opus-5" if you want maximum
-quality for a demo — it roughly triples the per-course cost.
+quality for a demo, though it roughly triples the per-course cost.
 """
 
 from __future__ import annotations
@@ -30,14 +30,14 @@ PLANNER_MODEL = "claude-haiku-4-5"
 EXPLAIN_MODEL = "claude-haiku-4-5"
 
 # LLM-as-judge for faithfulness and coverage. Highest token volume in the
-# project, lowest judgement difficulty — keep it cheap.
+# project, lowest judgement difficulty, so keep it cheap.
 JUDGE_MODEL = "claude-haiku-4-5"
 
 # Sonnet 5 thinks before answering by default. Thinking happens before any text
 # is emitted, so it sets the floor on time-to-first-token when streaming:
 # measured at 2.9s with thinking on versus 0.9s with it off, and it grows with
 # prompt complexity. Set to {"type": "disabled"} to trade some reasoning for a
-# faster first paint — and re-measure faithfulness against the fixture if you do,
+# faster first paint, and re-measure faithfulness against the fixture if you do,
 # since it changes the generation path.
 GENERATION_THINKING: dict | None = None
 
@@ -111,7 +111,7 @@ _refusal_override: float | None = None
 
 
 def refusal_score_threshold() -> float:
-    """Active refusal cutoff — calibrated file, else default."""
+    """Active refusal cutoff: calibrated file, else default."""
     if _refusal_override is not None:
         return _refusal_override
     return DEFAULT_REFUSAL_SCORE_THRESHOLD
