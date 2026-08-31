@@ -12,6 +12,11 @@ from . import router
 from .adapters import DEFAULT_ADAPTERS, REGISTRY
 
 
+# None is a meaningful value for max_age_days ("never expire"), so the
+# default cannot be None. This distinguishes "not passed" from "passed None".
+_UNSET: int | None = -1
+
+
 def ingest_topic(
     *,
     slug: str,
@@ -21,6 +26,8 @@ def ingest_topic(
     limit: int = 10,
     cfg: config.RetrievalConfig | None = None,
     force: bool = False,
+    refresh: bool = False,
+    max_age_days: int | None = _UNSET,
 ) -> dict:
     """Populate a namespace for one topic. Returns a summary dict.
 
@@ -28,8 +35,24 @@ def ingest_topic(
     alone is what gives each module material to work from: a corpus assembled
     from "q-learning" answers the topic broadly but leaves specific modules
     thin, which shows up later as low coverage.
+
+    Three ways past the cache, and the difference matters:
+
+    `force` rebuilds. The namespace is emptied first, so anything the sources
+    have dropped since disappears here too, and everything is embedded again.
+
+    `refresh` tops up. Documents are keyed on (namespace, source, external_id)
+    and inserted with ON CONFLICT DO NOTHING, so what is already indexed is
+    kept and skipped, and only genuinely new material is fetched and embedded.
+    This is what a reader wants when they ask for newer sources: papers
+    published since last time, without paying to re-embed the corpus.
+
+    `max_age_days` is the same top-up, applied automatically once the corpus
+    passes an age. It defaults to `config.CORPUS_MAX_AGE_DAYS`; pass None to
+    disable expiry for one call.
     """
     cfg = cfg or config.EMBEDDING
+    max_age = config.CORPUS_MAX_AGE_DAYS if max_age_days is _UNSET else max_age_days
     if adapter_names is None:
         # No explicit choice: pick sources by subject rather than always
         # fetching the same two. arXiv has nothing on the French Revolution.
@@ -44,13 +67,18 @@ def ingest_topic(
     raw_goal = query if isinstance(query, str) else " | ".join(queries)
 
     with db.connect() as conn:
+        # Recorded before anything is fetched, so the summary can say whether
+        # this topped up an existing corpus or built one from nothing.
+        had_corpus = db.namespace_is_populated(conn, namespace) and not force
         if force:
             # Force means "rebuild this corpus", not "skip the topic row check
             # while leaving stale documents in place".
             db.clear_namespace(conn, namespace)
             db.clear_topic_cache(conn, slug)
             conn.commit()
-        elif db.topic_is_ingested(conn, slug):
+        elif not refresh and db.topic_is_ingested(
+            conn, slug, max_age_days=max_age
+        ):
             stats = db.namespace_stats(conn, namespace)
             if int(stats["chunks"] or 0) > 0:
                 return {"cached": True, **stats}
@@ -119,6 +147,7 @@ def ingest_topic(
 
     return {
         "cached": False,
+        "refreshed": had_corpus,
         "new_documents": new_documents,
         "new_chunks": total_chunks,
         **stats,

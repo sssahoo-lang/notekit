@@ -19,11 +19,29 @@ def connect() -> Iterator[psycopg.Connection]:
         yield conn
 
 
-def topic_is_ingested(conn: psycopg.Connection, slug: str) -> bool:
+def topic_is_ingested(
+    conn: psycopg.Connection, slug: str, *, max_age_days: int | None = None
+) -> bool:
+    """Whether this topic has a corpus that is still considered current.
+
+    The age comparison runs in SQL rather than against the local clock, so it
+    uses the same source of truth as `mark_topic_ingested`'s `now()`. A client
+    in a different timezone, or one whose clock has drifted, cannot decide that
+    a corpus written seconds ago is already stale.
+
+    `max_age_days=None` means never expire, which is what this did before ages
+    were considered at all.
+    """
     row = conn.execute(
-        "SELECT ingested_at FROM topics WHERE slug = %s", (slug,)
+        """
+        SELECT ingested_at IS NOT NULL AS ingested,
+               (%s::int IS NULL
+                OR ingested_at > now() - make_interval(days => %s::int)) AS fresh
+        FROM topics WHERE slug = %s
+        """,
+        (max_age_days, max_age_days, slug),
     ).fetchone()
-    return bool(row and row["ingested_at"])
+    return bool(row and row["ingested"] and row["fresh"])
 
 
 def clear_topic_cache(conn: psycopg.Connection, slug: str) -> None:

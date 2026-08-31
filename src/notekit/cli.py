@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -28,7 +29,12 @@ def ingest_cmd(
     adapters: str = typer.Option(
         ",".join(DEFAULT_ADAPTERS), help="Comma-separated sources: wikipedia,arxiv"
     ),
-    force: bool = typer.Option(False, help="Re-ingest even if the topic is cached"),
+    force: bool = typer.Option(
+        False, help="Rebuild from scratch, discarding what is already indexed"
+    ),
+    refresh: bool = typer.Option(
+        False, help="Fetch again and add anything new, keeping existing sources"
+    ),
 ) -> None:
     """Fetch and index a corpus. Needs no API key."""
     slug = topic.lower().replace(" ", "-")
@@ -39,10 +45,20 @@ def ingest_cmd(
         limit=limit,
         adapter_names=[a.strip() for a in adapters.split(",") if a.strip()],
         force=force,
+        refresh=refresh,
     )
 
     if summary.get("cached"):
-        console.print(f"[yellow]Already ingested[/]: {summary['chunks']} chunks.")
+        console.print(
+            f"[yellow]Already ingested[/]: {summary['chunks']} chunks. "
+            "Use --refresh to look for newer sources."
+        )
+    elif summary.get("refreshed"):
+        console.print(
+            f"[green]Refreshed[/] {summary['new_documents']} new document(s), "
+            f"{summary['new_chunks']} new chunks. "
+            f"Corpus now {summary['documents']} documents, {summary['chunks']} chunks."
+        )
     else:
         console.print(
             f"[green]Indexed[/] {summary['new_documents']} documents, "
@@ -538,6 +554,16 @@ def sweep_cmd(
             console.print(f"[dim]{r.name}: {r.skipped}[/]")
 
 
+def _corpus_age(ingested_at) -> str:
+    """How long ago a corpus was fetched, flagged when past its age limit."""
+    if not ingested_at:
+        return "[yellow]never[/]"
+    days = (datetime.now(timezone.utc) - ingested_at).days
+    label = "today" if days == 0 else f"{days}d ago"
+    limit = config.CORPUS_MAX_AGE_DAYS
+    return f"[yellow]{label}[/]" if limit is not None and days >= limit else label
+
+
 @app.command("topics")
 def topics_cmd(
     check: str = typer.Option(
@@ -570,7 +596,7 @@ def topics_cmd(
         return
 
     table = Table(title="Topics and the corpus they share", title_style="dim")
-    for column in ("topic", "corpus", "chunks"):
+    for column in ("topic", "corpus", "chunks", "fetched"):
         table.add_column(column)
     for r in rows:
         alias = r["slug"] != r["namespace"]
@@ -578,11 +604,19 @@ def topics_cmd(
             f"{'└ ' if alias else ''}{r['slug']}",
             "[dim]same[/]" if alias else r["namespace"],
             "" if alias else str(r["chunks"]),
+            "" if alias else _corpus_age(r.get("ingested_at")),
         )
     console.print(table)
     console.print(
         "[dim]Indented rows are alternate phrasings sharing the corpus above.[/]"
     )
+    if config.CORPUS_MAX_AGE_DAYS is None:
+        console.print("[dim]Corpora never expire.[/]")
+    else:
+        console.print(
+            f"[dim]Corpora older than {config.CORPUS_MAX_AGE_DAYS} days are "
+            "topped up on the next course. `ingest --refresh` does it now.[/]"
+        )
 
 
 @app.command("stats")

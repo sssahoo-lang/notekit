@@ -97,6 +97,18 @@ SWEEP = [
 # --- Refusal ----------------------------------------------------------------
 
 # Default until `notekit calibrate --apply` (or the API) writes a measured value.
+# How long an ingested corpus stays usable before the next course on that topic
+# refetches. Sources move at very different speeds: an encyclopaedia article is
+# good for a year, an arXiv search on an active area is stale in a fortnight,
+# and the cache could not tell the difference because it only recorded whether
+# a topic had ever been ingested.
+#
+# Refetching is additive and costs no API money. Documents are deduplicated on
+# (namespace, source, external_id), so an expired corpus keeps everything it
+# already had and only embeds what is genuinely new. Set to None to keep the
+# old behaviour of never expiring.
+CORPUS_MAX_AGE_DAYS: int | None = 30
+
 DEFAULT_REFUSAL_SCORE_THRESHOLD = -2.0
 
 # Where a calibrated threshold is persisted so runtime matches eval.
