@@ -31,7 +31,15 @@ _HEADINGS = re.compile(r"\n=+ *([^=\n]+?) *=+\n")
 class WikipediaAdapter:
     name = "wikipedia"
 
-    def fetch(self, query: str, limit: int = 10):
+    def fetch(self, query: str, limit: int = 10, *, recent: bool = False):
+        """`recent` is accepted and ignored.
+
+        Wikipedia articles are living documents rather than dated ones: the
+        page on Q-learning is revised in place, so the current text is already
+        the recent text, and the search API's date ordering ranks by when a
+        page was created. Sorting by that would return new stubs ahead of the
+        mature articles foundational modules depend on.
+        """
         from . import SourceDocument
 
         hits = self._search(query, limit)

@@ -35,6 +35,9 @@ def ingest_cmd(
     refresh: bool = typer.Option(
         False, help="Fetch again and add anything new, keeping existing sources"
     ),
+    recent: bool = typer.Option(
+        False, help="Also fetch recently published work, not only the most relevant"
+    ),
 ) -> None:
     """Fetch and index a corpus. Needs no API key."""
     slug = topic.lower().replace(" ", "-")
@@ -46,6 +49,7 @@ def ingest_cmd(
         adapter_names=[a.strip() for a in adapters.split(",") if a.strip()],
         force=force,
         refresh=refresh,
+        recent=recent,
     )
 
     if summary.get("cached"):

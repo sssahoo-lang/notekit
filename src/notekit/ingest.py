@@ -27,6 +27,7 @@ def ingest_topic(
     cfg: config.RetrievalConfig | None = None,
     force: bool = False,
     refresh: bool = False,
+    recent: bool = False,
     max_age_days: int | None = _UNSET,
 ) -> dict:
     """Populate a namespace for one topic. Returns a summary dict.
@@ -50,6 +51,10 @@ def ingest_topic(
     `max_age_days` is the same top-up, applied automatically once the corpus
     passes an age. It defaults to `config.CORPUS_MAX_AGE_DAYS`; pass None to
     disable expiry for one call.
+
+    `recent` asks each source for newly published work alongside the most
+    relevant, rather than instead of it. See `adapters.blend` for why the
+    distinction matters.
     """
     cfg = cfg or config.EMBEDDING
     max_age = config.CORPUS_MAX_AGE_DAYS if max_age_days is _UNSET else max_age_days
@@ -96,7 +101,7 @@ def ingest_topic(
         print(f"Fetching from {name}: {len(queries)} queries x {per_query} docs...")
         for q in queries:
             try:
-                for doc in adapter.fetch(q, per_query):
+                for doc in adapter.fetch(q, per_query, recent=recent):
                     fetched.append((adapter.name, doc))
             except Exception as exc:  # noqa: BLE001
                 # One unreachable source should not lose the material from the

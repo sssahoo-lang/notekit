@@ -13,6 +13,8 @@ import xml.etree.ElementTree as ET
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from .. import config
+
 _BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
 # NCBI allows three requests a second without an API key. One request per second
@@ -25,10 +27,20 @@ _HEADERS = {"User-Agent": "notekit/0.1 (https://github.com/sssahoo-lang/notekit)
 class PubMedAdapter:
     name = "pubmed"
 
-    def fetch(self, query: str, limit: int = 10):
-        from . import SourceDocument
+    def fetch(self, query: str, limit: int = 10, *, recent: bool = False):
+        from . import SourceDocument, blend, split_budget
 
-        pmids = self._search(query, limit)
+        if recent:
+            n_relevant, n_recent = split_budget(limit)
+            by_relevance = self._search(query, n_relevant)
+            time.sleep(_POLITE_DELAY)
+            pmids = blend(
+                by_relevance,
+                self._search(query, n_recent, within_days=config.RECENT_WINDOW_DAYS),
+                key=lambda pmid: pmid,
+            )
+        else:
+            pmids = self._search(query, limit)
         if not pmids:
             return []
 
@@ -50,16 +62,28 @@ class PubMedAdapter:
         return documents
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
-    def _search(self, query: str, limit: int) -> list[str]:
+    def _search(
+        self, query: str, limit: int, *, within_days: int | None = None
+    ) -> list[str]:
+        """Search PubMed, optionally restricted to recently published work.
+
+        As with arXiv, the ordering stays relevance and `within_days` narrows
+        what is eligible. `reldate` with `datetype=pdat` is E-utilities' own
+        way of saying "published in the last N days".
+        """
+        params = {
+            "db": "pubmed",
+            "term": query,
+            "retmax": limit,
+            "retmode": "json",
+            "sort": "relevance",
+        }
+        if within_days is not None:
+            params["reldate"] = within_days
+            params["datetype"] = "pdat"
         response = httpx.get(
             f"{_BASE}/esearch.fcgi",
-            params={
-                "db": "pubmed",
-                "term": query,
-                "retmax": limit,
-                "retmode": "json",
-                "sort": "relevance",
-            },
+            params=params,
             timeout=30,
             headers=_HEADERS,
             follow_redirects=True,

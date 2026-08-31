@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import time
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from .. import config
 from ..parsing import PyMuPDFParser
 
 # Must be https: the http endpoint 301s, and an unfollowed redirect raises.
@@ -19,6 +21,10 @@ _POLITE_DELAY = 3.0
 
 _HEADERS = {"User-Agent": "notekit/0.1 (study-notes research prototype)"}
 
+# arXiv date ranges need both ends. Papers are not submitted in the future,
+# so an open upper bound is written as one far enough out to never bind.
+_FUTURE = "999912312359"
+
 
 class ArxivAdapter:
     name = "arxiv"
@@ -26,10 +32,22 @@ class ArxivAdapter:
     def __init__(self) -> None:
         self._parser = PyMuPDFParser()
 
-    def fetch(self, query: str, limit: int = 10):
-        from . import SourceDocument
+    def fetch(self, query: str, limit: int = 10, *, recent: bool = False):
+        from . import SourceDocument, blend, split_budget
 
-        entries = self._search(query, limit)
+        if recent:
+            n_relevant, n_recent = split_budget(limit)
+            by_relevance = self._search(query, n_relevant)
+            # arXiv asks for a gap between requests, and asking for recency
+            # means two searches where there was one.
+            time.sleep(_POLITE_DELAY)
+            entries = blend(
+                by_relevance,
+                self._search(query, n_recent, within_days=config.RECENT_WINDOW_DAYS),
+                key=lambda e: e["external_id"],
+            )
+        else:
+            entries = self._search(query, limit)
         documents = []
 
         for entry in entries:
@@ -58,11 +76,26 @@ class ArxivAdapter:
         return documents
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
-    def _search(self, query: str, limit: int) -> list[dict]:
+    def _search(
+        self, query: str, limit: int, *, within_days: int | None = None
+    ) -> list[dict]:
+        """Search arXiv, optionally restricted to recently submitted work.
+
+        The ordering stays relevance either way. `within_days` narrows what is
+        eligible rather than changing how what is eligible gets ranked, which
+        is the difference between recent work on the topic and whatever was
+        posted most recently.
+        """
+        search_query = f"all:{query}"
+        if within_days is not None:
+            start = datetime.now(timezone.utc) - timedelta(days=within_days)
+            search_query += (
+                f" AND submittedDate:[{start:%Y%m%d%H%M} TO {_FUTURE}]"
+            )
         response = httpx.get(
             _API,
             params={
-                "search_query": f"all:{query}",
+                "search_query": search_query,
                 "start": 0,
                 "max_results": limit,
                 "sortBy": "relevance",

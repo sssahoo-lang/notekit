@@ -7,8 +7,11 @@ and user uploads share the same retrieval and generation code.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypeVar
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -22,7 +25,44 @@ class SourceDocument:
 class SourceAdapter(Protocol):
     name: str
 
-    def fetch(self, query: str, limit: int) -> list[SourceDocument]: ...
+    def fetch(
+        self, query: str, limit: int, *, recent: bool = False
+    ) -> list[SourceDocument]: ...
+
+
+def split_budget(limit: int) -> tuple[int, int]:
+    """Divide a fetch budget between relevance and recency.
+
+    Relevance gets the odd one, because it is the half that carries the
+    standard treatments a learner needs to understand anything at all.
+    """
+    recent = limit // 2
+    return limit - recent, recent
+
+
+def blend(relevant: list[T], recent: list[T], *, key: Callable[[T], str]) -> list[T]:
+    """Merge a relevance-ordered batch with a recency-ordered one.
+
+    Sorting a source by date alone is a worse corpus, not a fresher one. The
+    newest papers matching a topic are usually narrow follow-ups that assume
+    the standard treatment rather than giving it, and a course built only from
+    those teaches nobody. Asking for recent material should mean "the usual
+    sources, plus what has appeared since", which is what this returns.
+
+    Relevance keeps its order and comes first, so the reranker sees the
+    strongest candidates in the position it already handled well. Duplicates
+    resolve to the relevance copy, since the same paper found both ways is not
+    two sources.
+    """
+    seen: set[str] = set()
+    merged: list[T] = []
+    for item in [*relevant, *recent]:
+        k = key(item)
+        if k in seen:
+            continue
+        seen.add(k)
+        merged.append(item)
+    return merged
 
 
 from .arxiv import ArxivAdapter  # noqa: E402

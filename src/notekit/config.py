@@ -109,6 +109,20 @@ SWEEP = [
 # old behaviour of never expiring.
 CORPUS_MAX_AGE_DAYS: int | None = 30
 
+# How far back "recent" reaches when a fetch asks for newly published work.
+#
+# Sorting a source by date is the obvious implementation and the wrong one.
+# Measured against arXiv, `sortBy=submittedDate` on "q-learning" returned
+# semantic communication, transverse-momentum extraction and segmentation
+# benchmarking: the newest papers that matched the query at all, ranked with no
+# regard for how weakly. Ranking by relevance *within* a window returns work
+# that is both recent and on the topic, which is what was being asked for.
+#
+# Eighteen months is long enough to hold the significant recent work in a fast
+# field and short enough to exclude what the unfiltered relevance half already
+# covers.
+RECENT_WINDOW_DAYS = 540
+
 DEFAULT_REFUSAL_SCORE_THRESHOLD = -2.0
 
 # Where a calibrated threshold is persisted so runtime matches eval.
