@@ -26,6 +26,7 @@ from . import auth, calibration, courses, db, explain, llm, retrieval, style, up
 from .identity import normalize
 from .models import Module, Syllabus
 from .pipeline import arun_course_events, plan_syllabus
+from .preferences import NotePreferences
 
 
 @dataclass
@@ -153,6 +154,7 @@ class CourseRequest(BaseModel):
     limit: int = 10
     skip_ingest: bool = False
     with_quiz: bool = False
+    preferences: NotePreferences | None = None
 
 
 class ProgressRequest(BaseModel):
@@ -234,6 +236,7 @@ async def _run_job(
     syllabus: Syllabus | None,
     only_indices: set[int] | None,
     existing_modules: dict[int, dict] | None,
+    preferences: NotePreferences | None = None,
 ) -> None:
     """Generate modules and persist; independent of any SSE subscriber."""
     profile = (
@@ -275,6 +278,7 @@ async def _run_job(
             with_quiz=with_quiz,
             namespace=namespace,
             style=profile,
+            prefs=preferences,
             syllabus=syllabus,
             cancel_event=job.cancel,
             only_indices=only_indices,
@@ -372,6 +376,7 @@ def _start_job(
     syllabus: Syllabus | None = None,
     only_indices: set[int] | None = None,
     existing_modules: dict[int, dict] | None = None,
+    preferences: NotePreferences | None = None,
 ) -> _CourseJob:
     existing = _jobs.get(course_id)
     if existing and existing.task and not existing.task.done():
@@ -391,6 +396,7 @@ def _start_job(
             syllabus=syllabus,
             only_indices=only_indices,
             existing_modules=existing_modules,
+            preferences=preferences,
         )
     )
     _jobs[course_id] = job
@@ -438,6 +444,11 @@ async def _course_events_saving(request: CourseRequest) -> AsyncIterator[dict]:
         with_quiz=request.with_quiz,
         used_style=bool(request.use_style),
         generation_status="generating",
+        preferences=(
+            request.preferences.model_dump(exclude_none=True)
+            if request.preferences and not request.preferences.is_empty()
+            else None
+        ),
     )
     yield {"type": "saved", "id": course_id}
 
@@ -450,6 +461,7 @@ async def _course_events_saving(request: CourseRequest) -> AsyncIterator[dict]:
         limit=request.limit,
         skip_ingest=request.skip_ingest,
         namespace=request.namespace,
+        preferences=request.preferences,
     )
     async for event in _subscribe_events(job):
         yield event
@@ -512,6 +524,11 @@ async def _resume_events(course_id: int) -> AsyncIterator[dict]:
         syllabus=syllabus,
         only_indices=missing,
         existing_modules=by_index,
+        preferences=(
+            NotePreferences(**course["preferences"])
+            if course.get("preferences")
+            else None
+        ),
     )
     async for event in _subscribe_events(job):
         yield event

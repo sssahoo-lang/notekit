@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { NamespaceInfo } from "@/lib/types";
+import type { NamespaceInfo, NotePreferences } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,7 +30,60 @@ import { cn } from "@/lib/utils";
  *    good answer far better than a sentence explaining it.
  * 3. Everything optional is behind a disclosure, summarised so it need not be
  *    opened to know what it does.
+ *
+ * Shaping controls live in their own disclosure rather than beside the quiz and
+ * source checkboxes, because they answer a different question. "Options" is
+ * what to include and where from; "How it is written" is form. Mixing the two
+ * made a list of seven unrelated things.
  */
+
+/** A choice the reader has not made is not the same as one they made against,
+ * so every control offers Auto rather than defaulting a preference on. Auto
+ * sends nothing at all and the notes generate as they always did. */
+function Choice<T extends string | boolean>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T | undefined;
+  options: { value: T; label: string }[];
+  onChange: (value: T | undefined) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+      <span className="text-sm text-foreground/80">{label}</span>
+      <div role="group" aria-label={label} className="flex flex-wrap gap-1">
+        {[{ value: undefined, label: "Auto" }, ...options].map((option) => {
+          const active = value === option.value;
+          return (
+            <button
+              key={option.label}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(option.value as T | undefined)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs transition-colors duration-150",
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                active
+                  ? "border-primary/40 bg-primary/10 font-medium text-primary"
+                  : "border-border bg-background text-foreground/65 hover:border-primary/30 hover:text-foreground",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const YES_NO = [
+  { value: true as const, label: "Yes" },
+  { value: false as const, label: "No" },
+];
 
 const EXAMPLES = [
   "Teach me Q-learning at an intermediate level",
@@ -51,6 +104,8 @@ type Props = {
   useStyle: boolean;
   onStyleChange: (value: boolean) => void;
   hasStyle: boolean;
+  prefs: NotePreferences;
+  onPrefsChange: (value: NotePreferences) => void;
   onSubmit: () => void;
 };
 
@@ -67,9 +122,25 @@ export function CourseForm({
   useStyle,
   onStyleChange,
   hasStyle,
+  prefs,
+  onPrefsChange,
   onSubmit,
 }: Props) {
   const usingOwnFiles = sourceMode !== autoSourceValue;
+
+  const set = <K extends keyof NotePreferences>(
+    key: K,
+    value: NotePreferences[K],
+  ) => {
+    // Auto removes the key rather than storing undefined, so the request body
+    // carries only what was actually chosen.
+    const next = { ...prefs };
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+    onPrefsChange(next);
+  };
+
+  const chosen = Object.keys(prefs).length;
 
   // Summarised on the closed disclosure, so the defaults are legible without
   // opening it.
@@ -220,6 +291,105 @@ export function CourseForm({
                 .
               </p>
             )}
+          </div>
+        </details>
+
+        <details className="group mt-3 border-t border-border/70 pt-4">
+          <summary
+            className={cn(
+              "flex cursor-pointer list-none items-center gap-2 text-sm text-foreground/75",
+              "hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              "[&::-webkit-details-marker]:hidden",
+            )}
+          >
+            <span
+              aria-hidden="true"
+              className="inline-block transition-transform duration-150 ease-out group-open:rotate-90 motion-reduce:transition-none"
+            >
+              ›
+            </span>
+            <span className="font-medium">How it is written</span>
+            <span className="text-muted-foreground">
+              {chosen
+                ? `· ${chosen} choice${chosen === 1 ? "" : "s"} set`
+                : "· let the writer decide"}
+            </span>
+          </summary>
+
+          <div className="mt-4 space-y-3 pl-5">
+            <Choice
+              label="Level"
+              value={prefs.level}
+              onChange={(v) => set("level", v)}
+              options={[
+                { value: "beginner", label: "Beginner" },
+                { value: "intermediate", label: "Intermediate" },
+                { value: "advanced", label: "Advanced" },
+              ]}
+            />
+            <Choice
+              label="Language"
+              value={prefs.vocabulary}
+              onChange={(v) => set("vocabulary", v)}
+              options={[
+                { value: "plain", label: "Plain English" },
+                { value: "mixed", label: "Mixed" },
+                { value: "technical", label: "Technical" },
+              ]}
+            />
+            <Choice
+              label="Length"
+              value={prefs.depth}
+              onChange={(v) => set("depth", v)}
+              options={[
+                { value: "brief", label: "Brief" },
+                { value: "standard", label: "Standard" },
+                { value: "thorough", label: "Thorough" },
+              ]}
+            />
+            <Choice
+              label="Layout"
+              value={prefs.structure}
+              onChange={(v) => set("structure", v)}
+              options={[
+                { value: "prose", label: "Prose" },
+                { value: "mixed", label: "Mixed" },
+                { value: "bullets", label: "Bullets" },
+              ]}
+            />
+            <Choice
+              label="Worked examples"
+              value={prefs.examples}
+              onChange={(v) => set("examples", v)}
+              options={YES_NO}
+            />
+            <Choice
+              label="Formulas and notation"
+              value={prefs.formulas}
+              onChange={(v) => set("formulas", v)}
+              options={YES_NO}
+            />
+            <Choice
+              label="Analogies"
+              value={prefs.analogies}
+              onChange={(v) => set("analogies", v)}
+              options={YES_NO}
+            />
+            <Choice
+              label="Diagrams"
+              value={prefs.diagrams}
+              onChange={(v) => set("diagrams", v)}
+              options={[
+                { value: "prefer", label: "Where they fit" },
+                { value: "avoid", label: "None" },
+              ]}
+            />
+
+            <p className="pt-1 text-sm text-muted-foreground">
+              These change how the notes read, never what they claim. Examples,
+              formulas and analogies are drawn from the sources when the sources
+              have them, and left out when they do not.
+            </p>
           </div>
         </details>
 

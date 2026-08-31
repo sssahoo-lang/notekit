@@ -4,6 +4,25 @@ export type NamespaceInfo = {
   chunks: number;
 };
 
+/**
+ * Per-course choices about the form of the notes. Every field is optional and
+ * omitting all of them produces exactly the course this app built before these
+ * existed, which is what the measured faithfulness figures describe.
+ *
+ * `examples`, `formulas` and `analogies` are three-state on purpose: undefined
+ * means the reader did not say, and false means they asked for it left out.
+ */
+export type NotePreferences = {
+  level?: "beginner" | "intermediate" | "advanced";
+  vocabulary?: "plain" | "mixed" | "technical";
+  depth?: "brief" | "standard" | "thorough";
+  structure?: "prose" | "bullets" | "mixed";
+  examples?: boolean;
+  formulas?: boolean;
+  analogies?: boolean;
+  diagrams?: "auto" | "prefer" | "avoid";
+};
+
 export type CourseRequest = {
   goal: string;
   namespace?: string | null;
@@ -12,6 +31,7 @@ export type CourseRequest = {
   limit?: number;
   skip_ingest?: boolean;
   with_quiz?: boolean;
+  preferences?: NotePreferences | null;
 };
 
 export type CourseProgress = {

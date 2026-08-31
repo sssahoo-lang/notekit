@@ -11,12 +11,14 @@ decide.
 from __future__ import annotations
 
 import asyncio
+import functools
 import re
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 
 from . import config, embedding, ingest, llm, retrieval, topics
 from .models import Chunk, Module, ModuleNotes, Quiz, QuizQuestion, Syllabus
+from .preferences import Level, NotePreferences
 from .style import StyleProfile
 
 _CITATION = re.compile(r"\[c(\d+)\]")
@@ -167,14 +169,29 @@ def parse_quiz(text: str) -> Quiz | None:
     return Quiz(questions=questions) if questions else None
 
 
-def plan_syllabus(goal: str) -> Syllabus:
-    """Entry node. One structured call: canonical slug plus module breakdown."""
+def plan_syllabus(goal: str, *, level: Level | None = None) -> Syllabus:
+    """Entry node. One structured call: canonical slug plus module breakdown.
+
+    `level` replaces the planner's own inference. Inferring it from phrasing is
+    a reasonable default and a poor guarantee: "explain gradient descent" says
+    nothing about who is asking. A reader who states their level should get it
+    rather than have it guessed, and the level reaches the notes through the
+    learning goals the planner writes here.
+    """
+    # With no stated level the prompt is left exactly as it was before this
+    # parameter existed, so the default course is the one the README measured.
+    pitch = (
+        f"The reader states their level: {level}. Use that rather than "
+        "inferring one from phrasing.\n\nMatch that level, write "
+        if level
+        else "Match the inferred learner level, write "
+    )
     return llm.parse(
         model=config.PLANNER_MODEL,
         system=_PLANNER_SYSTEM,
         prompt=(
             f"Learning goal: {goal}\n\n"
-            "Match the inferred learner level, write retrieval-ready academic "
+            f"{pitch}retrieval-ready academic "
             "queries for each module, and keep learning goals observable."
         ),
         max_tokens=config.MAX_TOKENS_PLAN,
@@ -222,6 +239,7 @@ def generate_module_notes(
     cfg: config.RetrievalConfig | None = None,
     with_quiz: bool = False,
     style: StyleProfile | None = None,
+    prefs: NotePreferences | None = None,
 ) -> ModuleNotes:
     """Per-module loop body: retrieve, rerank, generate cited notes."""
     cfg = cfg or config.EMBEDDING
@@ -244,6 +262,7 @@ def generate_module_notes(
     # Style guidance goes last, after the grounding rules and the task, so it
     # reads as a modifier on how to write rather than as a competing brief.
     style_instruction = f"\n\n{style.as_instruction()}" if style else ""
+    prefs_instruction = f"\n\n{prefs.as_instruction()}" if prefs else ""
 
     body = llm.complete(
         model=config.GENERATION_MODEL,
@@ -252,7 +271,7 @@ def generate_module_notes(
         prompt=(
             f"Module: {module.title}\n\n"
             f"The reader should come away able to:\n{goals}\n\n"
-            f"{_NOTES_TASK}{style_instruction}"
+            f"{_NOTES_TASK}{style_instruction}{prefs_instruction}"
         ),
         max_tokens=config.MAX_TOKENS_NOTES,
         purpose="write-notes",
@@ -338,6 +357,7 @@ async def astream_module_notes(
     cfg: config.RetrievalConfig | None = None,
     with_quiz: bool = False,
     style: StyleProfile | None = None,
+    prefs: NotePreferences | None = None,
 ) -> AsyncIterator[dict]:
     """Same work as `generate_module_notes`, emitted as it is written.
 
@@ -364,6 +384,7 @@ async def astream_module_notes(
     goals = "\n".join(f"- {g}" for g in module.learning_goals)
     passages = f"Source passages:\n\n{_format_passages(chunks)}"
     style_instruction = f"\n\n{style.as_instruction()}" if style else ""
+    prefs_instruction = f"\n\n{prefs.as_instruction()}" if prefs else ""
 
     body = ""
     holding = True
@@ -376,7 +397,7 @@ async def astream_module_notes(
         prompt=(
             f"Module: {module.title}\n\n"
             f"The reader should come away able to:\n{goals}\n\n"
-            f"{_NOTES_TASK}{style_instruction}"
+            f"{_NOTES_TASK}{style_instruction}{prefs_instruction}"
         ),
         max_tokens=config.MAX_TOKENS_NOTES,
         purpose="write-notes",
@@ -478,6 +499,7 @@ async def arun_course_events(
     with_quiz: bool = False,
     namespace: str | None = None,
     style: StyleProfile | None = None,
+    prefs: NotePreferences | None = None,
     cancel_event: asyncio.Event | None = None,
     only_indices: set[int] | None = None,
 ) -> AsyncIterator[dict]:
@@ -496,7 +518,9 @@ async def arun_course_events(
 
     if syllabus is None:
         yield {"type": "planning"}
-        syllabus = await asyncio.to_thread(plan_syllabus, goal)
+        syllabus = await asyncio.to_thread(
+            functools.partial(plan_syllabus, goal, level=prefs.level if prefs else None)
+        )
 
     if namespace:
         skip_ingest = True
@@ -567,6 +591,7 @@ async def arun_course_events(
                     cfg=cfg,
                     with_quiz=with_quiz,
                     style=style,
+                    prefs=prefs,
                 ):
                     await events.put({**event, "index": index})
         except Exception as exc:  # noqa: BLE001
@@ -621,6 +646,7 @@ def run_course(
     with_quiz: bool = False,
     namespace: str | None = None,
     style: StyleProfile | None = None,
+    prefs: NotePreferences | None = None,
 ) -> tuple[Syllabus, list[ModuleNotes]]:
     """Plan, ensure the corpus exists, then run every module concurrently.
 
@@ -631,7 +657,9 @@ def run_course(
     """
     cfg = cfg or config.EMBEDDING
 
-    syllabus = syllabus or plan_syllabus(goal)
+    syllabus = syllabus or plan_syllabus(
+        goal, level=prefs.level if prefs else None
+    )
 
     # An explicit namespace means "build this course only from what is already
     # in here", the uploaded-material path. Fetching from open sources would
@@ -668,7 +696,12 @@ def run_course(
         notes = list(
             pool.map(
                 lambda m: generate_module_notes(
-                    m, namespace=namespace, cfg=cfg, with_quiz=with_quiz, style=style
+                    m,
+                    namespace=namespace,
+                    cfg=cfg,
+                    with_quiz=with_quiz,
+                    style=style,
+                    prefs=prefs,
                 ),
                 syllabus.modules,
             )

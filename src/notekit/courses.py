@@ -58,6 +58,12 @@ def ensure_table(conn) -> None:
     conn.execute(
         "ALTER TABLE courses ADD COLUMN IF NOT EXISTS syllabus JSONB"
     )
+    # The reader's form choices, kept for the same reason as the syllabus:
+    # resuming a partial course has to write the remaining sections the way the
+    # first ones were written, or one course ends up in two voices.
+    conn.execute(
+        "ALTER TABLE courses ADD COLUMN IF NOT EXISTS preferences JSONB"
+    )
     conn.execute(
         """
         CREATE INDEX IF NOT EXISTS courses_user_created_idx
@@ -159,6 +165,7 @@ def save(
     used_style: bool,
     generation_status: str = "generating",
     syllabus: dict[str, Any] | None = None,
+    preferences: dict[str, Any] | None = None,
 ) -> int:
     status = _valid_status(generation_status)
     slimmed = slim_modules(modules)
@@ -169,11 +176,11 @@ def save(
             INSERT INTO courses (
                 user_id, goal, summary, title, namespace, module_titles, modules,
                 estimated_cost_usd, with_quiz, used_style, generation_status,
-                syllabus, word_count
+                syllabus, word_count, preferences
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s,
-                %s::jsonb, %s
+                %s::jsonb, %s, %s::jsonb
             )
             RETURNING id
             """,
@@ -191,6 +198,7 @@ def save(
                 status,
                 json.dumps(syllabus) if syllabus is not None else None,
                 word_count_of(slimmed),
+                json.dumps(preferences) if preferences is not None else None,
             ),
         ).fetchone()
         conn.commit()
@@ -357,7 +365,8 @@ def get(course_id: int) -> dict | None:
             """
             SELECT id, user_id, goal, summary, title, namespace, module_titles,
                    modules, estimated_cost_usd, with_quiz, used_style,
-                   created_at, progress, opened_at, word_count, generation_status, syllabus
+                   created_at, progress, opened_at, word_count, generation_status,
+                   syllabus, preferences
             FROM courses
             WHERE id = %s
             """,
@@ -488,6 +497,7 @@ def _full_row(row: dict, *, hydrate: bool = False) -> dict:
         "used_style": row["used_style"],
         "generation_status": row.get("generation_status") or "complete",
         "syllabus": _parse_json(row.get("syllabus")),
+        "preferences": _parse_json(row.get("preferences")),
         "created_at": row["created_at"].isoformat()
         if hasattr(row["created_at"], "isoformat")
         else row["created_at"],

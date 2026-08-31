@@ -39,6 +39,7 @@ import type {
   CourseEvent,
   ModuleState,
   NamespaceInfo,
+  NotePreferences,
   SavedCourse,
   SavedCourseSummary,
 } from "@/lib/types";
@@ -197,6 +198,8 @@ export function CourseWorkspace() {
   const [activeCourseId, setActiveCourseId] = useState<number | null>(null);
   const [withQuiz, setWithQuiz] = useState(true);
   const [useStyle, setUseStyle] = useState(false);
+  // Empty means the reader chose nothing, and nothing is sent.
+  const [prefs, setPrefs] = useState<NotePreferences>({});
   const [hasStyle, setHasStyle] = useState(false);
   const [phase, setPhase] = useState<RunPhase>("idle");
   const [detail, setDetail] = useState("");
@@ -542,6 +545,7 @@ export function CourseWorkspace() {
             user: userId,
             use_style: useStyle && hasStyle,
             with_quiz: withQuiz,
+            preferences: Object.keys(prefs).length ? prefs : null,
             namespace: effectiveSource === AUTO_SOURCE ? null : uploadNs,
           },
           controller.signal,
@@ -625,6 +629,8 @@ export function CourseWorkspace() {
               userId={userId}
               withQuiz={withQuiz}
               onQuizChange={setWithQuiz}
+              prefs={prefs}
+              onPrefsChange={setPrefs}
               useStyle={useStyle}
               onStyleChange={setUseStyle}
               hasStyle={hasStyle}
