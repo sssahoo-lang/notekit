@@ -33,8 +33,8 @@ export function normalizeId(value: string): string {
 function createId(): string {
   const random =
     typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID().slice(0, 8)
-      : Math.random().toString(36).slice(2, 10);
+      ? crypto.randomUUID()
+      : `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
   return `reader-${random}`;
 }
 

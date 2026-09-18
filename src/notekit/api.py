@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import tempfile
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -22,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import auth, calibration, courses, db, explain, llm, retrieval, style, upload
+from . import auth, calibration, config, courses, db, explain, llm, retrieval, style, upload
 from .identity import normalize
 from .models import Module, Syllabus
 from .pipeline import arun_course_events, plan_syllabus
@@ -101,7 +102,9 @@ async def site_password_gate(request, call_next):
         return await call_next(request)
 
     path = request.url.path
-    if path in auth.OPEN_PATHS or not path.startswith("/api/"):
+    if path in auth.OPEN_PATHS:
+        return await call_next(request)
+    if not path.startswith("/api/") and path not in auth.DOCS_PATHS:
         return await call_next(request)
 
     if not auth.check_token(request.headers.get(auth.HEADER)):
@@ -109,6 +112,64 @@ async def site_password_gate(request, call_next):
             {"detail": "This instance is password protected."}, status_code=401
         )
     return await call_next(request)
+
+
+# --- Ownership, throttling, budget -------------------------------------------
+#
+# Reader ids are unauthenticated bearer strings: knowing one is being that
+# reader. That is the trust model the README states, and the routes below now
+# hold to it. Course ids are sequential integers, so without these checks a
+# course was reachable by anyone who could count.
+
+_rate_windows: dict[tuple[str, str], list[float]] = {}
+
+
+def _owned(course_id: int, user: str) -> dict:
+    """Load a course the caller owns, or 404.
+
+    404 rather than 403 on a mismatch. Confirming that an id exists but belongs
+    to someone else is itself a small leak, and sequential ids make it a cheap
+    one to harvest.
+    """
+    row = courses.get(course_id)
+    if not row or row.get("user_id") != normalize(user):
+        raise HTTPException(404, f"course {course_id} not found")
+    return row
+
+
+def _throttle(bucket: str, user: str) -> None:
+    """Sliding-window rate limit per reader, in memory, per process."""
+    limit, window = config.RATE_LIMITS[bucket]
+    key = (bucket, normalize(user))
+    now = time.monotonic()
+    recent = [t for t in _rate_windows.get(key, []) if now - t < window]
+    if len(recent) >= limit:
+        raise HTTPException(
+            429,
+            f"Too many {bucket} requests: the limit is {limit} per "
+            f"{window // 60} minutes.",
+        )
+    recent.append(now)
+    _rate_windows[key] = recent
+
+
+def _check_budget(user: str) -> None:
+    """Refuse to start paid work once a reader has spent the day's allowance."""
+    spent = courses.spent_today(user)
+    if spent >= config.DAILY_BUDGET_USD:
+        raise HTTPException(
+            429,
+            f"Daily budget reached: ${spent:.2f} of ${config.DAILY_BUDGET_USD:.2f} "
+            "in the last 24 hours. Try again later.",
+        )
+
+
+def _ensure_namespace_access(namespace: str, user: str) -> None:
+    """Uploaded material is private to the reader who uploaded it."""
+    if namespace.startswith("user-") and not namespace.startswith(
+        f"user-{normalize(user)}-"
+    ):
+        raise HTTPException(404, f"namespace {namespace!r} not found")
 
 
 @app.post("/api/auth")
@@ -158,6 +219,7 @@ class CourseRequest(BaseModel):
 
 
 class ProgressRequest(BaseModel):
+    user: str
     modules_read: list[int] = []
     bookmark: dict | None = None
 
@@ -167,7 +229,7 @@ class ExplainRequest(BaseModel):
     module_index: int
     highlighted: str
     question: str | None = None
-    user: str | None = None
+    user: str
 
 
 class StyleLearnRequest(BaseModel):
@@ -545,8 +607,12 @@ def health() -> dict:
 
 
 @app.get("/api/namespaces")
-def namespaces() -> list[dict]:
-    """Every namespace with indexed content, for populating a picker."""
+def namespaces(user: str = "anonymous") -> list[dict]:
+    """Namespaces the caller may build from: shared topics and their own uploads.
+
+    Listing every namespace handed out the reader id of everyone who had ever
+    uploaded, which is the one string the whole trust model rests on.
+    """
     with db.connect() as conn:
         # Chunks are counted in a subquery, not a join: joining documents to
         # chunks on namespace multiplies the two counts together.
@@ -561,7 +627,12 @@ def namespaces() -> list[dict]:
             ORDER BY d.namespace
             """
         ).fetchall()
-    return [dict(r) for r in rows]
+    mine = f"user-{normalize(user)}-"
+    return [
+        dict(r)
+        for r in rows
+        if not r["namespace"].startswith("user-") or r["namespace"].startswith(mine)
+    ]
 
 
 @app.get("/api/courses")
@@ -582,10 +653,8 @@ def claim_courses(request: ClaimRequest) -> dict:
 
 
 @app.get("/api/courses/{course_id}")
-def get_course(course_id: int) -> dict:
-    row = courses.get(course_id)
-    if not row:
-        raise HTTPException(404, f"course {course_id} not found")
+def get_course(course_id: int, user: str) -> dict:
+    row = _owned(course_id, user)
     # Reopening counts as activity, so "continue studying" tracks what you are
     # actually reading rather than what you generated most recently.
     courses.touch(course_id)
@@ -595,6 +664,7 @@ def get_course(course_id: int) -> dict:
 @app.patch("/api/courses/{course_id}/progress")
 def set_progress(course_id: int, request: ProgressRequest) -> dict:
     """Record which modules have been read and where the bookmark sits."""
+    _owned(course_id, request.user)
     updated = courses.set_progress(
         course_id,
         {"modules_read": sorted(set(request.modules_read)), "bookmark": request.bookmark},
@@ -605,8 +675,9 @@ def set_progress(course_id: int, request: ProgressRequest) -> dict:
 
 
 @app.post("/api/courses/{course_id}/cancel")
-async def cancel_course(course_id: int) -> dict:
+async def cancel_course(course_id: int, user: str) -> dict:
     """Stop background generation; keep whatever modules already finished."""
+    _owned(course_id, user)
     job = _jobs.get(course_id)
     if job:
         job.cancel.set()
@@ -625,11 +696,11 @@ async def cancel_course(course_id: int) -> dict:
 
 
 @app.post("/api/courses/{course_id}/resume")
-def resume_course(course_id: int) -> StreamingResponse:
+def resume_course(course_id: int, user: str) -> StreamingResponse:
     """Regenerate missing modules for a partial course."""
-    row = courses.get(course_id)
-    if not row:
-        raise HTTPException(404, f"course {course_id} not found")
+    _owned(course_id, user)
+    _throttle("course", user)
+    _check_budget(user)
     return StreamingResponse(
         _sse(_resume_events(course_id)),
         media_type="text/event-stream",
@@ -640,9 +711,8 @@ def resume_course(course_id: int) -> StreamingResponse:
 @app.post("/api/explain")
 def explain_selection(request: ExplainRequest) -> dict:
     """Explain a highlighted span using that module's own source passages."""
-    course = courses.get(request.course_id)
-    if not course:
-        raise HTTPException(404, f"course {request.course_id} not found")
+    course = _owned(request.course_id, request.user)
+    _throttle("explain", request.user)
 
     passages, found = explain.passages_for_module(course, request.module_index)
     if not found:
@@ -658,7 +728,7 @@ def explain_selection(request: ExplainRequest) -> dict:
             passages=passages,
             highlighted=request.highlighted,
             question=request.question,
-            style=style.load(normalize(request.user)) if request.user else None,
+            style=style.load(normalize(request.user)),
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -668,7 +738,8 @@ def explain_selection(request: ExplainRequest) -> dict:
 
 
 @app.delete("/api/courses/{course_id}")
-def delete_course(course_id: int, user: str | None = None) -> dict:
+def delete_course(course_id: int, user: str) -> dict:
+    _owned(course_id, user)
     job = _jobs.get(course_id)
     if job:
         job.cancel.set()
@@ -681,6 +752,9 @@ def delete_course(course_id: int, user: str | None = None) -> dict:
 @app.post("/api/course")
 def course(request: CourseRequest) -> StreamingResponse:
     """Stream a course as its modules complete; persist when finished."""
+    caller = request.user or "anonymous"
+    _throttle("course", caller)
+    _check_budget(caller)
     return StreamingResponse(
         _sse(_course_events_saving(request)),
         media_type="text/event-stream",
@@ -696,7 +770,8 @@ def plan(goal: str = Form(...)) -> Syllabus:
 
 
 @app.get("/api/search")
-def search(q: str, namespace: str) -> list[dict]:
+def search(q: str, namespace: str, user: str = "anonymous") -> list[dict]:
+    _ensure_namespace_access(namespace, user)
     chunks = retrieval.retrieve(query=q, namespace=namespace)
     return [c.model_dump() for c in chunks]
 
@@ -715,13 +790,29 @@ async def upload_files(
 
     # Written to a temp directory because the parsers work on paths, and it is
     # cleaned up whether or not indexing succeeds.
+    if len(files) > config.MAX_UPLOAD_FILES:
+        raise HTTPException(413, f"At most {config.MAX_UPLOAD_FILES} files per upload.")
+    _throttle("upload", user)
+
     with tempfile.TemporaryDirectory() as tmp:
         paths = []
         for upload_file in files:
             if not upload_file.filename:
                 continue
             target = Path(tmp) / Path(upload_file.filename).name
-            target.write_bytes(await upload_file.read())
+            # Read in pieces and stop at the cap, rather than reading the whole
+            # body and then measuring it: by then the memory is already spent.
+            written = 0
+            with target.open("wb") as out:
+                while chunk := await upload_file.read(1024 * 1024):
+                    written += len(chunk)
+                    if written > config.MAX_UPLOAD_BYTES:
+                        raise HTTPException(
+                            413,
+                            f"{upload_file.filename} exceeds the "
+                            f"{config.MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+                        )
+                    out.write(chunk)
             paths.append(str(target))
 
         if not paths:
@@ -760,4 +851,9 @@ def calibrate(
         calset = calibration.CalibrationSet.load(evalset_path)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return calibration.calibrate(calset, apply=apply).model_dump()
+    if apply:
+        # Persisting a threshold changes every reader's refusal behaviour.
+        # That is an operator decision, taken at the CLI, not something any
+        # holder of the site password should be able to do over HTTP.
+        raise HTTPException(403, "apply is only available from the CLI.")
+    return calibration.calibrate(calset, apply=False).model_dump()

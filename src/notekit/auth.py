@@ -21,7 +21,11 @@ from hashlib import sha256
 
 # Endpoints reachable without the password. Health must stay open or the
 # platform's health check fails and the service is restarted forever.
-OPEN_PATHS = {"/api/health", "/api/auth", "/docs", "/openapi.json", "/redoc"}
+OPEN_PATHS = {"/api/health", "/api/auth"}
+
+# The API schema is a map of every endpoint. Locally it is useful; on a gated
+# instance it should need the password like everything else it describes.
+DOCS_PATHS = {"/docs", "/openapi.json", "/redoc"}
 
 HEADER = "X-Site-Token"
 

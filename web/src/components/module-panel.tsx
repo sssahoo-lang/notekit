@@ -18,7 +18,7 @@ type Props = {
   onVisible?: () => void;
   /** Needed to ask about a passage; null until the course has been saved. */
   courseId?: number | null;
-  userId?: string;
+  userId: string;
   expanded?: boolean;
   onToggle?: () => void;
   /** Reader-wide preference; sources stay listed either way. */

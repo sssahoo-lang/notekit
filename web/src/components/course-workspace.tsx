@@ -280,7 +280,7 @@ export function CourseWorkspace() {
       const p = getProfile();
       setProfile(p);
       void refreshLibrary(p);
-      getNamespaces()
+      getNamespaces(p.id)
         .then((rows) => {
           if (!cancelled) setSources(rows);
         })
@@ -319,7 +319,7 @@ export function CourseWorkspace() {
       return;
     }
     const id = window.setInterval(() => {
-      void getCourse(activeCourseId)
+      void getCourse(activeCourseId, userId)
         .then((course) => {
           setModules(mapSavedModules(course));
           setCourseStatus(course.generation_status ?? "complete");
@@ -329,7 +329,7 @@ export function CourseWorkspace() {
         .catch(() => undefined);
     }, 3000);
     return () => window.clearInterval(id);
-  }, [activeCourseId, courseStatus, phase, profile, refreshLibrary]);
+  }, [activeCourseId, courseStatus, phase, profile, refreshLibrary, userId]);
 
   const running =
     phase === "planning" || phase === "gathering" || phase === "writing";
@@ -371,7 +371,7 @@ export function CourseWorkspace() {
     bookmarkParagraph = 0,
   ) {
     try {
-      await saveProgress(courseId, {
+      await saveProgress(courseId, userId, {
         modules_read: read,
         bookmark: { module_index: bookmarkIndex, paragraph: bookmarkParagraph },
       });
@@ -394,7 +394,7 @@ export function CourseWorkspace() {
     setError(null);
     abortRef.current?.abort();
     try {
-      const course = await getCourse(id);
+      const course = await getCourse(id, userId);
       const mapped = mapSavedModules(course);
       const read = course.progress?.modules_read ?? [];
       const bookmark = course.progress?.bookmark?.module_index ?? 0;
@@ -478,7 +478,7 @@ export function CourseWorkspace() {
       }
       if (event.type === "done") {
         setCourseStatus("complete");
-        getNamespaces().then(setSources).catch(() => undefined);
+        getNamespaces(userId).then(setSources).catch(() => undefined);
         if (profile) void refreshLibrary(profile);
       }
       if (event.type === "cancelled") {
@@ -498,14 +498,14 @@ export function CourseWorkspace() {
       setError(null);
     }
     try {
-      await consumeStream(resumeCourse(id, controller.signal));
+      await consumeStream(resumeCourse(id, userId, controller.signal));
       setPhase((p) => (p === "error" ? p : "done"));
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
       // Resume attach can 404/fail if the job already finished. Refresh
       // instead.
       try {
-        const course = await getCourse(id);
+        const course = await getCourse(id, userId);
         setModules(mapSavedModules(course));
         setCourseStatus(course.generation_status ?? "complete");
         setPhase("done");
@@ -567,7 +567,7 @@ export function CourseWorkspace() {
   async function stopGeneration() {
     if (activeCourseId != null) {
       try {
-        await cancelCourse(activeCourseId);
+        await cancelCourse(activeCourseId, userId);
       } catch {
         // Still abort the local stream.
       }

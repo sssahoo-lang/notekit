@@ -677,10 +677,14 @@ is inside the noise; `--repeat 3` or more is needed before concluding anything,
 and the command says so rather than presenting an ordering as a finding.
 
 **No real authentication.** A deployed instance can be put behind one shared
-password, but everyone who gets in shares one identity. Uploads are isolated per
-user and verified not to leak across namespaces, yet `--user` is still taken on
-trust. This is isolation between browsers, not access control between people,
-and it needs real auth before more than one person uses it.
+password, but everyone who gets in shares one identity. Every course, upload
+and search is scoped to the reader id that created it, so a course id alone
+reaches nothing and the namespace listing shows only your own material; each
+reader is held to a daily spend and a request rate, uploads are capped in size
+and count, and new reader ids are full UUIDs rather than eight hex characters.
+But a reader id is still a bearer string taken on trust: whoever holds it is
+that reader. This is isolation between browsers, not access control between
+people, and it needs real auth before more than one person uses it.
 
 **Other gaps.** Scanned PDFs are rejected rather than OCR'd. Topic
 canonicalisation relies on the planner emitting a consistent slug, so close

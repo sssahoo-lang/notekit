@@ -48,6 +48,27 @@ GENERATION_THINKING: dict | None = None
 # mid-citation. Raising it does not make the model write more, it lets the
 # sections that were already writing that much finish.
 MAX_TOKENS_NOTES = 8000
+
+# Abuse limits. The deployed instance sits behind one shared password, so
+# everyone inside is one identity as far as billing goes, and a single reader
+# in a loop can spend the whole balance. These bound what one reader id can
+# cost per day and how fast it can ask.
+#
+# The budget is measured from what the courses table already records, so it
+# needs no new state and survives a restart. Rate limits are in-memory and per
+# process, which is fine for the single instance this runs as.
+DAILY_BUDGET_USD = 5.0
+RATE_LIMITS = {
+    # endpoint: (requests, per_seconds)
+    "course": (10, 3600),
+    "explain": (60, 3600),
+    "upload": (20, 3600),
+}
+
+# Uploads are read into memory before parsing, so the cap is the cap on RAM
+# one request can take. 25 MB is a long PDF; a textbook scan is out of scope.
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_UPLOAD_FILES = 20
 MAX_TOKENS_PLAN = 2000
 MAX_TOKENS_QUIZ = 3000
 MAX_TOKENS_EXPLAIN = 800

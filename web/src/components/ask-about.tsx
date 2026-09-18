@@ -59,7 +59,7 @@ type Props = {
   containerRef: React.RefObject<HTMLElement | null>;
   courseId: number | null;
   moduleIndex: number;
-  userId?: string;
+  userId: string;
   /** Fallback text when asking about the section as a whole. */
   sectionTitle: string;
 };

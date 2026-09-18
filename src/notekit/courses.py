@@ -377,6 +377,27 @@ def get(course_id: int) -> dict | None:
     return _full_row(row, hydrate=True)
 
 
+def spent_today(user_id: str) -> float:
+    """Estimated spend by one reader over the last 24 hours.
+
+    Read from the cost each course already records, so a budget check needs
+    no new table and is not reset by a restart. Courses still generating have
+    no cost yet and are counted at zero, which is generous in the reader's
+    favour for the few seconds that lasts.
+    """
+    with db.connect() as conn:
+        ensure_table(conn)
+        row = conn.execute(
+            """
+            SELECT coalesce(sum(estimated_cost_usd), 0) AS spent
+            FROM courses
+            WHERE user_id = %s AND created_at >= now() - interval '1 day'
+            """,
+            (normalize(user_id),),
+        ).fetchone()
+    return float(row["spent"] or 0.0)
+
+
 def delete(course_id: int, *, user_id: str | None = None) -> bool:
     with db.connect() as conn:
         ensure_table(conn)

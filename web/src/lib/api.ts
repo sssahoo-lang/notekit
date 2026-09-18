@@ -138,8 +138,10 @@ export async function getHealth(): Promise<{
   return res.json();
 }
 
-export async function getNamespaces(): Promise<NamespaceInfo[]> {
-  const res = await request(`/api/namespaces`, { cache: "no-store" });
+export async function getNamespaces(user: string): Promise<NamespaceInfo[]> {
+  const res = await request(`/api/namespaces?user=${encodeURIComponent(user)}`, {
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
@@ -173,22 +175,16 @@ export async function claimCourses(
   return data.courses;
 }
 
-export async function getCourse(id: number): Promise<SavedCourse> {
-  const res = await request(`/api/courses/${id}`, {
+export async function getCourse(id: number, user: string): Promise<SavedCourse> {
+  const res = await request(`/api/courses/${id}?user=${encodeURIComponent(user)}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
 
-export async function deleteCourse(
-  id: number,
-  user?: string,
-): Promise<void> {
-  const q = user?.trim()
-    ? `?user=${encodeURIComponent(user.trim())}`
-    : "";
-  const res = await request(`/api/courses/${id}${q}`, {
+export async function deleteCourse(id: number, user: string): Promise<void> {
+  const res = await request(`/api/courses/${id}?user=${encodeURIComponent(user)}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -196,12 +192,14 @@ export async function deleteCourse(
 
 export async function saveProgress(
   id: number,
+  user: string,
   progress: CourseProgress,
 ): Promise<void> {
   const res = await request(`/api/courses/${id}/progress`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      user,
       modules_read: progress.modules_read ?? [],
       bookmark: progress.bookmark ?? null,
     }),
@@ -209,8 +207,8 @@ export async function saveProgress(
   if (!res.ok) throw new Error(await readError(res));
 }
 
-export async function cancelCourse(id: number): Promise<void> {
-  const res = await request(`/api/courses/${id}/cancel`, {
+export async function cancelCourse(id: number, user: string): Promise<void> {
+  const res = await request(`/api/courses/${id}/cancel?user=${encodeURIComponent(user)}`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -222,7 +220,7 @@ export async function explainSelection(input: {
   moduleIndex: number;
   highlighted: string;
   question?: string;
-  user?: string;
+  user: string;
 }): Promise<{ answer: string; estimated_cost_usd: number }> {
   const res = await request(`/api/explain`, {
     method: "POST",
@@ -232,7 +230,7 @@ export async function explainSelection(input: {
       module_index: input.moduleIndex,
       highlighted: input.highlighted,
       question: input.question || null,
-      user: input.user || null,
+      user: input.user,
     }),
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -334,9 +332,10 @@ export async function* streamCourse(
 /** Resume missing modules for a partial course. */
 export async function* resumeCourse(
   id: number,
+  user: string,
   signal?: AbortSignal,
 ): AsyncGenerator<CourseEvent> {
-  const res = await request(`/api/courses/${id}/resume`, {
+  const res = await request(`/api/courses/${id}/resume?user=${encodeURIComponent(user)}`, {
     method: "POST",
     headers: { Accept: "text/event-stream" },
     signal,
