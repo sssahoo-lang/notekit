@@ -85,7 +85,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   }
 
   return (
-    <div id="main" className="mx-auto w-full max-w-sm px-4 py-16 sm:px-6">
+    <div className="mx-auto w-full max-w-sm px-4 py-16 sm:px-6">
       <h1 className="font-heading text-3xl tracking-tight text-ink">{copy.title}</h1>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{copy.blurb}</p>
 

@@ -107,6 +107,11 @@ export function NotesBody({
     <div className={className}>
       {segments.map((segment, index) => {
         if (segment.type === "prose") {
+          // No width cap here on purpose. It looks like prose that wants one,
+          // but the reader column is already bounded by max-w-5xl minus the
+          // section rail: 660px at both 1440px and 2560px, which in the 18.4px
+          // Source Serif the notes use is 76 characters a line. Capping it at
+          // 52ch took that to 58 and made the column needlessly narrow.
           return (
             <CitedText
               key={`p-${index}`}

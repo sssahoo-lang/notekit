@@ -69,12 +69,8 @@ export function SiteHeader() {
       ref={barRef}
       className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-md lg:hidden"
     >
-      <a
-        href="#main"
-        className="sr-only rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
-      >
-        Skip to content
-      </a>
+      {/* The skip link lives in the layout, not here: this header is
+          lg:hidden, so a copy in it disappears on the desktop. */}
 
       {/* Wraps rather than overflows. At 375px the row of links, the name
           control and the theme toggle came to about 419px and pushed the
@@ -84,7 +80,7 @@ export function SiteHeader() {
       <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-1.5 sm:gap-x-4 sm:px-6 sm:py-0">
         <Link
           href="/"
-          className="font-heading text-lg tracking-tight text-ink transition-colors hover:text-primary"
+          className="rounded-md font-heading text-lg tracking-tight text-ink transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           NoteKit
         </Link>

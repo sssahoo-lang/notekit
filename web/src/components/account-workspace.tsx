@@ -30,7 +30,7 @@ export function AccountWorkspace() {
 
   if (loading) {
     return (
-      <div id="main" className="mx-auto w-full max-w-lg px-4 py-16 sm:px-6">
+      <div className="mx-auto w-full max-w-lg px-4 py-16 sm:px-6">
         <p role="status" className="text-sm text-muted-foreground">
           Checking your session…
         </p>
@@ -40,7 +40,7 @@ export function AccountWorkspace() {
 
   if (!account) {
     return (
-      <div id="main" className="mx-auto w-full max-w-lg px-4 py-16 sm:px-6">
+      <div className="mx-auto w-full max-w-lg px-4 py-16 sm:px-6">
         <h1 className="font-heading text-3xl tracking-tight text-ink">Account</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           You are using NoteKit without an account, so your courses live in this
@@ -90,7 +90,7 @@ export function AccountWorkspace() {
   }
 
   return (
-    <div id="main" className="mx-auto w-full max-w-lg px-4 py-12 sm:px-6">
+    <div className="mx-auto w-full max-w-lg px-4 py-12 sm:px-6">
       <h1 className="font-heading text-3xl tracking-tight text-ink">Account</h1>
       <p className="mt-2 text-sm text-muted-foreground">{account.email}</p>
 

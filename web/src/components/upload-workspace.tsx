@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { RunError } from "@/components/run-status";
@@ -62,7 +62,7 @@ export function UploadWorkspace() {
   }
 
   return (
-    <div id="main" className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6">
       <h1 className="font-heading text-3xl tracking-tight text-ink">
         Materials
       </h1>

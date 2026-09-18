@@ -54,7 +54,7 @@ export function StyleWorkspace() {
   }
 
   return (
-    <div id="main" className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6">
       <h1 className="font-heading text-3xl tracking-tight text-ink">
         Writing style
       </h1>

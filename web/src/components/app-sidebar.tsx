@@ -88,12 +88,15 @@ export function AppSidebar() {
   }, [userId, nav.refreshToken]);
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-border/70 bg-sidebar/60 lg:flex xl:w-64">
+    <aside
+      aria-label="Library"
+      className="hidden w-60 shrink-0 flex-col border-r border-border/70 bg-sidebar/60 lg:flex xl:w-64"
+    >
       <div className="flex h-14 items-center px-5">
         <Link
           href="/"
           onClick={() => nav.goHome()}
-          className="font-heading text-lg tracking-tight text-ink transition-colors hover:text-primary"
+          className="rounded-md font-heading text-lg tracking-tight text-ink transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           NoteKit
         </Link>
@@ -255,10 +258,24 @@ export function AppSidebar() {
             </Link>
           </div>
         )}
-        <p className="sr-only" role="status">
-          {ok === false ? "NoteKit service unreachable" : ""}
-        </p>
+        {/* On a phone the same failure gets a banner with the command to run.
+            The desktop had only the red dot, which says something is wrong
+            without saying what or what to do about it. */}
+        <div role="status" aria-live="polite">
+          {ok === false ? (
+            <div className="mt-3 rounded-lg border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
+              <p className="font-medium">Can&apos;t reach the NoteKit service.</p>
+              <p className="mt-1 text-destructive/85">
+                Start it with{" "}
+                <code className="font-mono">uvicorn notekit.api:app</code>
+              </p>
+            </div>
+          ) : (
+            <span className="sr-only" />
+          )}
+        </div>
       </div>
     </aside>
   );
 }
+

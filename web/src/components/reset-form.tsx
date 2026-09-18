@@ -46,7 +46,7 @@ export function ResetForm() {
 
   if (!token) {
     return (
-      <div id="main" className="mx-auto w-full max-w-sm px-4 py-16 sm:px-6">
+      <div className="mx-auto w-full max-w-sm px-4 py-16 sm:px-6">
         <h1 className="font-heading text-3xl tracking-tight text-ink">
           That link is incomplete
         </h1>
@@ -62,7 +62,7 @@ export function ResetForm() {
   }
 
   return (
-    <div id="main" className="mx-auto w-full max-w-sm px-4 py-16 sm:px-6">
+    <div className="mx-auto w-full max-w-sm px-4 py-16 sm:px-6">
       <h1 className="font-heading text-3xl tracking-tight text-ink">
         Choose a new password
       </h1>

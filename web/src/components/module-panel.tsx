@@ -342,7 +342,10 @@ export function ModulePanel({
       ) : null}
 
       {activeChunk ? (
-        <aside className="mt-4 rounded-xl border border-cite/30 bg-cite/8 px-4 py-3">
+        <aside
+          aria-label="Source preview"
+          className="mt-4 rounded-xl border border-cite/30 bg-cite/8 px-4 py-3"
+        >
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <Badge className="bg-cite text-cite-foreground hover:bg-cite">
               Source {numbering.get(activeChunk.id) ?? activeChunk.id}

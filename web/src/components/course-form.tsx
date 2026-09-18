@@ -247,33 +247,43 @@ export function CourseForm({
             <div className="flex items-start gap-2.5">
               <Checkbox
                 id="quiz"
+                aria-describedby="quiz-hint"
                 checked={withQuiz}
                 onCheckedChange={(v) => onQuizChange(v === true)}
                 className="mt-0.5"
               />
-              <Label htmlFor="quiz" className="text-sm font-normal">
-                Add practice questions
-                <span className="mt-0.5 block text-muted-foreground">
+              {/* The hint sits outside the label. Inside it, the accessible
+                  name became the whole run-on sentence, which a screen reader
+                  reads out before the checkbox state. It stays inside the
+                  clickable column so the pointer target is unchanged. */}
+              <div className="grid gap-0.5">
+                <Label htmlFor="quiz" className="text-sm font-normal">
+                  Add practice questions
+                </Label>
+                <p id="quiz-hint" className="text-sm text-muted-foreground">
                   A few questions per section, answerable from the sources.
                   Roughly doubles the cost.
-                </span>
-              </Label>
+                </p>
+              </div>
             </div>
 
             {hasStyle ? (
               <div className="flex items-start gap-2.5">
                 <Checkbox
                   id="style"
+                  aria-describedby="style-hint"
                   checked={useStyle}
                   onCheckedChange={(v) => onStyleChange(v === true)}
                   className="mt-0.5"
                 />
-                <Label htmlFor="style" className="text-sm font-normal">
-                  Write in my style
-                  <span className="mt-0.5 block text-muted-foreground">
+                <div className="grid gap-0.5">
+                  <Label htmlFor="style" className="text-sm font-normal">
+                    Write in my style
+                  </Label>
+                  <p id="style-hint" className="text-sm text-muted-foreground">
                     Easier to read, slightly less strictly grounded.
-                  </span>
-                </Label>
+                  </p>
+                </div>
               </div>
             ) : null}
 
