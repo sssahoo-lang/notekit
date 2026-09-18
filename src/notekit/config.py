@@ -58,6 +58,12 @@ MAX_TOKENS_NOTES = 8000
 # needs no new state and survives a restart. Rate limits are in-memory and per
 # process, which is fine for the single instance this runs as.
 DAILY_BUDGET_USD = 5.0
+
+# Judge each section for whether it taught its goals as it is written, so the
+# score reaches the course map rather than only `notekit eval`. One Haiku call
+# per section, measured at about three cents each on 1,500-word notes, run
+# beside generation rather than in its path.
+TEACHING_AT_GENERATION = True
 RATE_LIMITS = {
     # endpoint: (requests, per_seconds)
     "course": (10, 3600),

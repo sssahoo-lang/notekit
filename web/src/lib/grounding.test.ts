@@ -169,3 +169,18 @@ describe("courseGrounding and hasGrounding", () => {
     expect(hasGrounding(cited)).toBe(true);
   });
 });
+
+
+describe("teaching score", () => {
+  it("passes the judged score through to the row", () => {
+    const section = {
+      ...sectionWith("A [c1].", [chunk(1, "One")]),
+      teaching: { score: 0.5, goals: [] },
+    } as ModuleState;
+    expect(sectionGrounding(section).teaching).toBe(0.5);
+  });
+
+  it("is null until a section has been judged", () => {
+    expect(sectionGrounding(sectionWith("A [c1].", [chunk(1, "One")])).teaching).toBeNull();
+  });
+});

@@ -79,6 +79,7 @@ function mapSavedModules(course: SavedCourse): ModuleState[] {
       streamingText: m.notes?.body ?? "",
       notes: m.notes,
       error: m.error,
+      teaching: m.teaching ?? null,
       status: (m.error
         ? "error"
         : m.notes?.refused
@@ -158,6 +159,15 @@ function applyCourseEvent(
                 streamingText: event.notes.body || m.streamingText,
                 status: event.notes.refused ? "refused" : "done",
               }
+            : m,
+        ),
+      );
+      break;
+    case "teaching":
+      setters.setModules((prev) =>
+        prev.map((m) =>
+          m.index === event.index
+            ? { ...m, teaching: { score: event.score, goals: event.goals } }
             : m,
         ),
       );

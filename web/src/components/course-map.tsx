@@ -51,7 +51,7 @@ function Bar({
           ? `Section ${row.index + 1}, ${row.title}, refused for lack of sources`
           : `Section ${row.index + 1}, ${row.title}, ${row.sources} source${
               row.sources === 1 ? "" : "s"
-            }`
+            }${row.teaching == null ? "" : `, taught ${Math.round(row.teaching * 100)} percent`}`
       }
       className="group flex min-w-0 flex-1 flex-col justify-end gap-0 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-300/70"
     >
@@ -93,6 +93,17 @@ function Bar({
               ? "not cited"
               : `${row.sources} source${row.sources === 1 ? "" : "s"}`}
         </div>
+        {!row.refused && row.teaching != null ? (
+          <div
+            className={cn(
+              "mt-0.5 text-[11.5px]",
+              row.teaching >= 2 / 3 ? "text-slate-200" : "text-amber-200/90",
+            )}
+            title="How well the section taught its goals, judged 0 to 3 per goal"
+          >
+            taught {Math.round(row.teaching * 100)}%
+          </div>
+        ) : null}
       </div>
     </button>
   );
@@ -135,8 +146,8 @@ export function CourseMap({ modules, activeSection, onSelectSection }: Props) {
           </h2>
         </div>
         <p className="max-w-[38ch] text-[13px] leading-relaxed text-slate-400 sm:text-right">
-          Each section sized by how many separate documents it cites. Breadth,
-          not correctness.
+          Each section sized by how many separate documents it cites, breadth
+          rather than correctness. Beneath, how well it taught its goals.
         </p>
       </div>
 

@@ -331,29 +331,7 @@ def evaluate_module(
         for i, goal in enumerate(module.learning_goals, 1)
     ]
 
-    teaching_verdicts = llm.parse(
-        model=config.JUDGE_MODEL,
-        system=_TEACHING_SYSTEM,
-        prompt=(
-            f"Reader level: {level or 'not stated'}\n\n"
-            f"Study notes:\n\n{notes.body}\n\nLearning goals:\n{goals}"
-        ),
-        max_tokens=2000,
-        schema=_TeachingVerdicts,
-        purpose="judge-teaching",
-    )
-    by_teach = {v.goal_index: v for v in teaching_verdicts.verdicts}
-    teaching = [
-        TeachingCheck(
-            goal=goal,
-            # A goal the judge did not score is scored as not taught, for the
-            # same reason an unjudged claim counts as unsupported: a short
-            # response must not read as a good one.
-            score=max(0, min(3, by_teach[i].score)) if i in by_teach else 0,
-            reason=by_teach[i].reason if i in by_teach else "No verdict returned.",
-        )
-        for i, goal in enumerate(module.learning_goals, 1)
-    ]
+    teaching = judge_teaching(notes.body, module.learning_goals, level)
 
     return ModuleEval(
         module_title=notes.module_title,
@@ -361,6 +339,46 @@ def evaluate_module(
         coverage=coverage,
         teaching=teaching,
     )
+
+
+def judge_teaching(
+    body: str, learning_goals: list[str], level: str | None = None
+) -> list[TeachingCheck]:
+    """Score one section's notes against its goals on the 0-3 rubric.
+
+    Standalone so the API can run it as sections finish, not only the eval
+    lane afterwards. The reader sees the number in the course map.
+    """
+    goals = "\n".join(f"{i}. {g}" for i, g in enumerate(learning_goals, 1))
+    verdicts = llm.parse(
+        model=config.JUDGE_MODEL,
+        system=_TEACHING_SYSTEM,
+        prompt=(
+            f"Reader level: {level or 'not stated'}\n\n"
+            f"Study notes:\n\n{body}\n\nLearning goals:\n{goals}"
+        ),
+        max_tokens=2000,
+        schema=_TeachingVerdicts,
+        purpose="judge-teaching",
+    )
+    by_goal = {v.goal_index: v for v in verdicts.verdicts}
+    return [
+        TeachingCheck(
+            goal=goal,
+            # A goal the judge did not score is scored as not taught, for the
+            # same reason an unjudged claim counts as unsupported: a short
+            # response must not read as a good one.
+            score=max(0, min(3, by_goal[i].score)) if i in by_goal else 0,
+            reason=by_goal[i].reason if i in by_goal else "No verdict returned.",
+        )
+        for i, goal in enumerate(learning_goals, 1)
+    ]
+
+
+def teaching_summary(checks: list[TeachingCheck]) -> dict:
+    """The shape stored on a module and sent to the reader."""
+    score = sum(c.score for c in checks) / (3 * len(checks)) if checks else None
+    return {"score": score, "goals": [c.model_dump() for c in checks]}
 
 
 def evaluate_course(

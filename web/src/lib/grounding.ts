@@ -37,6 +37,8 @@ export type SectionGrounding = {
   refused: boolean;
   /** Distinct document titles, most-cited first. */
   documents: string[];
+  /** 0 to 1: how well the section taught its goals, or null until judged. */
+  teaching: number | null;
 };
 
 export function sectionGrounding(module: ModuleState): SectionGrounding {
@@ -45,6 +47,7 @@ export function sectionGrounding(module: ModuleState): SectionGrounding {
     index: module.index,
     title: module.title,
     refused: Boolean(notes?.refused),
+    teaching: module.teaching?.score ?? null,
   };
 
   if (!notes || notes.refused || !notes.body) {

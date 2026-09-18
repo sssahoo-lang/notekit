@@ -91,6 +91,7 @@ export type SavedCourseSummary = {
 };
 
 export type SavedModule = {
+  teaching?: TeachingSummary | null;
   index: number;
   title: string;
   notes: ModuleNotes | null;
@@ -119,6 +120,13 @@ export type QuizQuestion = {
 
 export type Quiz = {
   questions: QuizQuestion[];
+};
+
+/** How well a section taught its goals, judged 0 to 3 per goal as it was written. */
+export type TeachingSummary = {
+  /** Mean of the rubric across goals, as a fraction of 3. */
+  score: number | null;
+  goals: { goal: string; score: number; reason: string }[];
 };
 
 export type ModuleNotes = {
@@ -164,6 +172,7 @@ export type CourseEvent =
   | { type: "ingesting"; namespace: string }
   | { type: "ingested"; cached: boolean; chunks: number }
   | { type: "module_start"; index: number; title: string }
+  | { type: "teaching"; index: number; score: number | null; goals: TeachingSummary["goals"] }
   | { type: "token"; index: number; text: string }
   | { type: "module"; index: number; notes: ModuleNotes }
   | { type: "module_error"; index: number; error: string }
@@ -183,6 +192,7 @@ export type ModuleState = {
   notes: ModuleNotes | null;
   error: string | null;
   status: "pending" | "streaming" | "done" | "refused" | "error";
+  teaching?: TeachingSummary | null;
 };
 
 export type UploadResult = {

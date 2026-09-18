@@ -285,7 +285,9 @@ was invented and coverage says each goal was addressed. A section can satisfy
 both by faithfully reporting, on every goal, that the sources do not cover it,
 and teach nothing; one did. A third judge scores each learning goal 0 to 3
 (not taught, named, explained, taught) so the number that moves when a course
-gets better is distinct from the numbers that move when it gets safer.
+gets better is distinct from the numbers that move when it gets safer. It runs
+beside generation, about three cents a section, and shows in the course map
+under each section's source count.
 
 **Personalisation that cannot become invention.** Two mechanisms, one rule.
 A style profile learned from a writing sample carries form and never subject
@@ -719,7 +721,7 @@ is why Wikipedia is fetched alongside it.
 | 9. Per-course control over the form of the notes | done, effect not yet measured |
 | 10. Corpus expiry and recency-aware fetching | done, effect not yet measured |
 | 11. Outline review before writing | done |
-| 12. Teaching judge, alongside faithfulness and coverage | done, on the eval lane |
+| 12. Teaching judge, alongside faithfulness and coverage | done, in the eval lane and the course map |
 
 Beyond the milestones: 264 tests run in CI on every push, 208 on the Python
 logic layer and 56 on the web one, and every citation the export writes is

@@ -23,7 +23,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import auth, calibration, config, courses, db, explain, llm, retrieval, style, upload
+from . import (
+    auth,
+    calibration,
+    config,
+    courses,
+    db,
+    evaluation,
+    explain,
+    llm,
+    retrieval,
+    style,
+    upload,
+)
 from .identity import normalize
 from .models import Module, Syllabus
 from .pipeline import arun_course_events, plan_syllabus
@@ -328,6 +340,26 @@ async def _run_job(
     def _ordered() -> list[dict]:
         return [modules[i] for i in sorted(modules)]
 
+    # Teaching judges run beside generation, one task per finished section,
+    # so a section reaches the reader the moment it is written rather than
+    # after a judge call. They are gathered before the course is marked
+    # complete so the last score is stored, and a judge that fails costs only
+    # its score: the section is already saved by the time it starts.
+    judge_tasks: list[asyncio.Task] = []
+
+    async def _judge_section(index: int, body: str, goals: list[str]) -> None:
+        level = preferences.level if preferences else None
+        try:
+            checks = await asyncio.to_thread(evaluation.judge_teaching, body, goals, level)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  ! teaching judge failed for section {index + 1}: {exc}")
+            return
+        summary_ = evaluation.teaching_summary(checks)
+        if index in modules:
+            modules[index]["teaching"] = summary_
+            _flush()
+        await job.publish({"type": "teaching", "index": index, **summary_})
+
     def _flush(*, cost: float | None = None, status: str | None = None) -> None:
         courses.update(
             job.course_id,
@@ -381,8 +413,18 @@ async def _run_job(
                     "title": title,
                     "notes": notes,
                     "error": None,
+                    "teaching": None,
                 }
                 _flush(status="generating")
+                body = (notes or {}).get("body") or ""
+                syl_modules = (syllabus_data or {}).get("modules") or []
+                goals = (
+                    syl_modules[index].get("learning_goals") or []
+                    if index < len(syl_modules)
+                    else []
+                )
+                if config.TEACHING_AT_GENERATION and body and goals and not notes.get("refused"):
+                    judge_tasks.append(asyncio.create_task(_judge_section(index, body, goals)))
             elif etype == "module_error":
                 index = int(event["index"])
                 title = (
@@ -398,6 +440,8 @@ async def _run_job(
                 }
                 _flush(status="generating")
             elif etype == "done":
+                if judge_tasks:
+                    await asyncio.gather(*judge_tasks, return_exceptions=True)
                 terminal = "complete"
                 _flush(cost=event.get("estimated_cost_usd"), status="complete")
                 await job.publish(event)

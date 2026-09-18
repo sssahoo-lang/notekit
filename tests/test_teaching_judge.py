@@ -84,3 +84,13 @@ def test_aggregate_reports_teaching_beside_the_others(monkeypatch):
     summary = evaluation.aggregate(results)
     assert summary["teaching"] == 1.0
     assert summary["refused"] == 1
+
+
+def test_judge_teaching_standalone_and_its_summary(monkeypatch):
+    monkeypatch.setattr(evaluation.llm, "parse", fake_parse({1: 2, 2: 3}))
+    checks = evaluation.judge_teaching("body", ["a", "b"], "beginner")
+    assert [c.score for c in checks] == [2, 3]
+    summary = evaluation.teaching_summary(checks)
+    assert summary["score"] == 5 / 6
+    assert summary["goals"][0] == {"goal": "a", "score": 2, "reason": "r"}
+    assert evaluation.teaching_summary([]) == {"score": None, "goals": []}
