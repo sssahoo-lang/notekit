@@ -34,12 +34,16 @@ const RELATED_DELAY_MS = 600;
 export function GoalSuggestions({ query, userId, onPick, onOpenCourse }: Props) {
   const [instant, setInstant] = useState<Instant>({ history: [], topics: [] });
   const [related, setRelated] = useState<string[]>([]);
-  const [thinking, setThinking] = useState(false);
+  // Which text the related ideas were fetched for. "Thinking" is derived
+  // from it rather than set in the effect: results are stale, and a call is
+  // pending, exactly when this lags behind what is typed.
+  const [relatedFor, setRelatedFor] = useState<string | null>(null);
   const [dismissedFor, setDismissedFor] = useState<string | null>(null);
   const latest = useRef(0);
 
   const q = query.trim();
   const active = q.length >= MIN_CHARS && dismissedFor !== q;
+  const thinking = active && relatedFor !== q;
 
   useEffect(() => {
     if (!active) return;
@@ -50,7 +54,6 @@ export function GoalSuggestions({ query, userId, onPick, onOpenCourse }: Props) 
       })
       .catch(() => undefined);
 
-    setThinking(true);
     const timer = window.setTimeout(() => {
       void suggestRelated(q, userId)
         .then((goals) => {
@@ -60,7 +63,7 @@ export function GoalSuggestions({ query, userId, onPick, onOpenCourse }: Props) 
           if (seq === latest.current) setRelated([]);
         })
         .finally(() => {
-          if (seq === latest.current) setThinking(false);
+          if (seq === latest.current) setRelatedFor(q);
         });
     }, RELATED_DELAY_MS);
     return () => window.clearTimeout(timer);
@@ -75,7 +78,8 @@ export function GoalSuggestions({ query, userId, onPick, onOpenCourse }: Props) 
   }, [q]);
 
   if (!active) return null;
-  const empty = !instant.history.length && !instant.topics.length && !related.length;
+  const shownRelated = relatedFor === q ? related : [];
+  const empty = !instant.history.length && !instant.topics.length && !shownRelated.length;
   if (empty && !thinking) return null;
 
   const item =
@@ -114,15 +118,15 @@ export function GoalSuggestions({ query, userId, onPick, onOpenCourse }: Props) 
         </div>
       ) : null}
 
-      {related.length || thinking ? (
+      {shownRelated.length || thinking ? (
         <div>
           <div className={heading}>Related ideas</div>
-          {related.map((g) => (
+          {shownRelated.map((g) => (
             <button key={g} type="button" role="option" aria-selected={false} className={item} onClick={() => onPick(g)}>
               {g}
             </button>
           ))}
-          {thinking && !related.length ? (
+          {thinking ? (
             <div className="px-3 py-1.5 text-sm text-muted-foreground" role="status">
               Thinking of related goals…
             </div>
