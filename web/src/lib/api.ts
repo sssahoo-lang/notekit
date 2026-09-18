@@ -3,9 +3,11 @@ import type {
   CourseProgress,
   CourseRequest,
   NamespaceInfo,
+  NotePreferences,
   SavedCourse,
   SavedCourseSummary,
   StyleProfile,
+  Syllabus,
   UploadResult,
 } from "./types";
 
@@ -311,6 +313,21 @@ async function* readSseStream(
       yield JSON.parse(payload) as CourseEvent;
     }
   }
+}
+
+/** Plan an outline without writing anything. Cheap, so revising is free. */
+export async function planCourse(input: {
+  goal: string;
+  user: string;
+  preferences?: NotePreferences | null;
+}): Promise<Syllabus> {
+  const res = await request(`/api/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
 }
 
 /** Parse an SSE body from POST /api/course into typed events. */

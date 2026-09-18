@@ -11,6 +11,7 @@ import { LibraryList } from "@/components/library-list";
 import { ModulePanel } from "@/components/module-panel";
 import { RunError, RunStatus, type RunPhase } from "@/components/run-status";
 import { SectionRail } from "@/components/section-rail";
+import { SyllabusReview } from "@/components/syllabus-review";
 import { Button } from "@/components/ui/button";
 import {
   cancelCourse,
@@ -22,6 +23,7 @@ import {
   listCourses,
   resumeCourse,
   saveProgress,
+  planCourse,
   streamCourse,
 } from "@/lib/api";
 import {
@@ -42,6 +44,7 @@ import type {
   NotePreferences,
   SavedCourse,
   SavedCourseSummary,
+  Syllabus,
 } from "@/lib/types";
 
 const AUTO_SOURCE = "__auto__";
@@ -200,6 +203,11 @@ export function CourseWorkspace() {
   const [useStyle, setUseStyle] = useState(false);
   // Empty means the reader chose nothing, and nothing is sent.
   const [prefs, setPrefs] = useState<NotePreferences>({});
+  // The planned outline awaiting the reader's approval, and whether the
+  // planning call is in flight. Neither is a run phase: nothing is being
+  // written yet, and the reader may still walk away for free.
+  const [review, setReview] = useState<Syllabus | null>(null);
+  const [planning, setPlanning] = useState(false);
   const [hasStyle, setHasStyle] = useState(false);
   const [phase, setPhase] = useState<RunPhase>("idle");
   const [detail, setDetail] = useState("");
@@ -517,11 +525,30 @@ export function CourseWorkspace() {
   }
 
   async function start() {
-    if (!goal.trim() || running) return;
+    if (!goal.trim() || running || planning) return;
     if (effectiveSource !== AUTO_SOURCE && !uploadNs) {
       toast.error("Choose your materials, or add some under Materials");
       return;
     }
+    setPlanning(true);
+    setError(null);
+    try {
+      const outline = await planCourse({
+        goal: goal.trim(),
+        user: userId,
+        preferences: Object.keys(prefs).length ? prefs : null,
+      });
+      setReview(outline);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPlanning(false);
+    }
+  }
+
+  async function generate(syllabus: Syllabus) {
+    if (running) return;
+    setReview(null);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -547,6 +574,7 @@ export function CourseWorkspace() {
             with_quiz: withQuiz,
             preferences: Object.keys(prefs).length ? prefs : null,
             namespace: effectiveSource === AUTO_SOURCE ? null : uploadNs,
+            syllabus,
           },
           controller.signal,
         ),
@@ -619,6 +647,18 @@ export function CourseWorkspace() {
           ) : null}
 
           <div className="mt-10">
+            {planning ? (
+              <p role="status" className="py-10 text-center text-sm text-muted-foreground">
+                Planning the outline…
+              </p>
+            ) : review ? (
+              <SyllabusReview
+                syllabus={review}
+                onChange={setReview}
+                onConfirm={() => void generate(review)}
+                onBack={() => setReview(null)}
+              />
+            ) : (
             <CourseForm
               goal={goal}
               onGoalChange={setGoal}
@@ -636,6 +676,7 @@ export function CourseWorkspace() {
               hasStyle={hasStyle}
               onSubmit={() => void start()}
             />
+            )}
           </div>
 
           {error ? (

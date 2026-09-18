@@ -216,6 +216,15 @@ class CourseRequest(BaseModel):
     skip_ingest: bool = False
     with_quiz: bool = False
     preferences: NotePreferences | None = None
+    # A syllabus the reader has already reviewed. Planning is skipped and the
+    # course is written to exactly this outline.
+    syllabus: Syllabus | None = None
+
+
+class PlanRequest(BaseModel):
+    goal: str
+    user: str | None = None
+    preferences: NotePreferences | None = None
 
 
 class ProgressRequest(BaseModel):
@@ -524,6 +533,7 @@ async def _course_events_saving(request: CourseRequest) -> AsyncIterator[dict]:
         skip_ingest=request.skip_ingest,
         namespace=request.namespace,
         preferences=request.preferences,
+        syllabus=request.syllabus,
     )
     async for event in _subscribe_events(job):
         yield event
@@ -755,6 +765,8 @@ def course(request: CourseRequest) -> StreamingResponse:
     caller = request.user or "anonymous"
     _throttle("course", caller)
     _check_budget(caller)
+    if request.syllabus is not None and not 1 <= len(request.syllabus.modules) <= 8:
+        raise HTTPException(422, "A course needs between one and eight sections.")
     return StreamingResponse(
         _sse(_course_events_saving(request)),
         media_type="text/event-stream",
@@ -764,9 +776,18 @@ def course(request: CourseRequest) -> StreamingResponse:
 
 
 @app.post("/api/plan")
-def plan(goal: str = Form(...)) -> Syllabus:
+def plan(request: PlanRequest) -> Syllabus:
+    """Plan only, so the reader can revise the outline before paying to write it.
+
+    Planning is one Haiku call, well under a cent. Generation is a hundred
+    times that. Until now the first time a reader saw the syllabus was after
+    the expensive part, which is the wrong way round.
+    """
+    caller = request.user or "anonymous"
+    _throttle("plan", caller)
     llm.reset_usage()
-    return plan_syllabus(goal)
+    level = request.preferences.level if request.preferences else None
+    return plan_syllabus(request.goal, level=level)
 
 
 @app.get("/api/search")

@@ -61,6 +61,7 @@ DAILY_BUDGET_USD = 5.0
 RATE_LIMITS = {
     # endpoint: (requests, per_seconds)
     "course": (10, 3600),
+    "plan": (30, 3600),
     "explain": (60, 3600),
     "upload": (20, 3600),
 }

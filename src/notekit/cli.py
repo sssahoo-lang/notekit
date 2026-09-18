@@ -426,11 +426,11 @@ def eval_cmd(
     results, summary = runs[0]
 
     table = Table(title="Evaluation", title_style="dim")
-    for column in ("module", "claims", "supported", "faithfulness", "coverage"):
+    for column in ("module", "claims", "supported", "faithfulness", "coverage", "teaching"):
         table.add_column(column)
     for r in results:
         if r.refused:
-            table.add_row(r.module_title[:34], "n/a", "n/a", "[yellow]refused[/]", "n/a")
+            table.add_row(r.module_title[:34], "n/a", "n/a", "[yellow]refused[/]", "n/a", "n/a")
             continue
         table.add_row(
             r.module_title[:34],
@@ -438,9 +438,16 @@ def eval_cmd(
             str(sum(c.supported for c in r.claims)),
             f"{r.faithfulness:.0%}" if r.faithfulness is not None else "n/a",
             f"{r.coverage_score:.0%}" if r.coverage_score is not None else "n/a",
+            f"{r.teaching_score:.0%}" if r.teaching_score is not None else "n/a",
         )
     console.print(table)
 
+    teach = summary.get("teaching")
+    if teach is not None:
+        console.print(
+            f"teaching {teach:.1%}  (0-3 rubric per learning goal: not taught, "
+            "named, explained, taught)"
+        )
     faith = summary["faithfulness"]
     cov = summary["coverage"]
     console.print(

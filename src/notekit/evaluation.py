@@ -56,6 +56,22 @@ enough explanation also counts as not addressed.
 
 Give a one-sentence reason for every verdict."""
 
+_TEACHING_SYSTEM = """You judge whether study notes teach their stated learning goals.
+
+Coverage asks whether a goal is addressed. This asks something stricter: after \
+reading these notes, could a reader at the stated level actually do what the \
+goal names? Score each numbered goal from 0 to 3.
+
+0  not taught. The goal is absent, or the notes only say the sources lack it.
+1  named. The concept is mentioned or defined, with no mechanism or reasoning.
+2  explained. The mechanism or reasoning is there, but with no worked example, \
+contrast, or check the reader could apply.
+3  taught. Explained at the right level, with an example, contrast, or \
+procedure the reader could reuse.
+
+Judge only what the notes contain. Saying that the sources do not cover \
+something is honest and scores 0. Give a one-sentence reason per goal."""
+
 
 class _Claims(BaseModel):
     claims: list[str] = Field(description="Atomic factual claims, in order")
@@ -81,6 +97,22 @@ class _GoalVerdicts(BaseModel):
     verdicts: list[_GoalVerdict]
 
 
+class _TeachingVerdict(BaseModel):
+    goal_index: int = Field(description="1-based index of the learning goal")
+    score: int = Field(ge=0, le=3)
+    reason: str
+
+
+class _TeachingVerdicts(BaseModel):
+    verdicts: list[_TeachingVerdict]
+
+
+class TeachingCheck(BaseModel):
+    goal: str
+    score: int
+    reason: str
+
+
 class ClaimCheck(BaseModel):
     claim: str
     supported: bool
@@ -93,6 +125,7 @@ class ModuleEval(BaseModel):
 
     claims: list[ClaimCheck] = []
     coverage: list[ClaimCheck] = []
+    teaching: list[TeachingCheck] = []
 
     @property
     def faithfulness(self) -> float | None:
@@ -106,6 +139,20 @@ class ModuleEval(BaseModel):
         if not self.coverage:
             return None
         return sum(c.supported for c in self.coverage) / len(self.coverage)
+
+    @property
+    def teaching_score(self) -> float | None:
+        """Mean of the 0-3 rubric across goals, as a fraction of 3.
+
+        Faithfulness says the notes did not make things up and coverage says
+        the goals were addressed. Neither says the reader learned anything:
+        a section can be fully faithful, address every goal by reporting that
+        the sources do not cover it, and teach nothing. This is the number
+        that moves when the course gets better rather than merely safer.
+        """
+        if not self.teaching:
+            return None
+        return sum(t.score for t in self.teaching) / (3 * len(self.teaching))
 
     @property
     def unsupported(self) -> list[ClaimCheck]:
@@ -230,8 +277,10 @@ def _verdicts_for(
     }
 
 
-def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
-    """Score one module's notes for faithfulness and coverage."""
+def evaluate_module(
+    notes: ModuleNotes, module: Module, level: str | None = None
+) -> ModuleEval:
+    """Score one module's notes for faithfulness, coverage and teaching."""
     if notes.refused:
         # A refusal has no claims to check. Whether refusing was *correct* is a
         # separate question, answered by the calibration set.
@@ -282,20 +331,52 @@ def evaluate_module(notes: ModuleNotes, module: Module) -> ModuleEval:
         for i, goal in enumerate(module.learning_goals, 1)
     ]
 
-    return ModuleEval(module_title=notes.module_title, claims=claims, coverage=coverage)
+    teaching_verdicts = llm.parse(
+        model=config.JUDGE_MODEL,
+        system=_TEACHING_SYSTEM,
+        prompt=(
+            f"Reader level: {level or 'not stated'}\n\n"
+            f"Study notes:\n\n{notes.body}\n\nLearning goals:\n{goals}"
+        ),
+        max_tokens=2000,
+        schema=_TeachingVerdicts,
+        purpose="judge-teaching",
+    )
+    by_teach = {v.goal_index: v for v in teaching_verdicts.verdicts}
+    teaching = [
+        TeachingCheck(
+            goal=goal,
+            # A goal the judge did not score is scored as not taught, for the
+            # same reason an unjudged claim counts as unsupported: a short
+            # response must not read as a good one.
+            score=max(0, min(3, by_teach[i].score)) if i in by_teach else 0,
+            reason=by_teach[i].reason if i in by_teach else "No verdict returned.",
+        )
+        for i, goal in enumerate(module.learning_goals, 1)
+    ]
+
+    return ModuleEval(
+        module_title=notes.module_title,
+        claims=claims,
+        coverage=coverage,
+        teaching=teaching,
+    )
 
 
 def evaluate_course(
-    notes: list[ModuleNotes], modules: list[Module]
+    notes: list[ModuleNotes], modules: list[Module], level: str | None = None
 ) -> list[ModuleEval]:
     """Score every module. Runs concurrently, so this lane blocks nobody."""
     with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_MODULES) as pool:
-        return list(pool.map(evaluate_module, notes, modules))
+        return list(
+            pool.map(lambda pair: evaluate_module(*pair, level=level), zip(notes, modules))
+        )
 
 
 def aggregate(results: list[ModuleEval]) -> dict:
     scored = [r for r in results if r.faithfulness is not None]
     covered = [r for r in results if r.coverage_score is not None]
+    taught = [r for r in results if r.teaching_score is not None]
     total_claims = sum(len(r.claims) for r in scored)
     supported = sum(sum(c.supported for c in r.claims) for r in scored)
 
@@ -309,5 +390,8 @@ def aggregate(results: list[ModuleEval]) -> dict:
         "faithfulness": supported / total_claims if total_claims else None,
         "coverage": (
             sum(r.coverage_score for r in covered) / len(covered) if covered else None
+        ),
+        "teaching": (
+            sum(r.teaching_score for r in taught) / len(taught) if taught else None
         ),
     }

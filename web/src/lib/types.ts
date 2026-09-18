@@ -23,6 +23,21 @@ export type NotePreferences = {
   diagrams?: "auto" | "prefer" | "avoid";
 };
 
+export type SyllabusModule = {
+  title: string;
+  query: string;
+  learning_goals: string[];
+};
+
+/** The planner's outline. Shown to the reader for revision before writing. */
+export type Syllabus = {
+  title: string;
+  topic_slug: string;
+  summary: string;
+  corpus_query?: string;
+  modules: SyllabusModule[];
+};
+
 export type CourseRequest = {
   goal: string;
   namespace?: string | null;
@@ -32,6 +47,8 @@ export type CourseRequest = {
   skip_ingest?: boolean;
   with_quiz?: boolean;
   preferences?: NotePreferences | null;
+  /** A reviewed outline. Planning is skipped and the course follows it. */
+  syllabus?: Syllabus | null;
 };
 
 export type CourseProgress = {

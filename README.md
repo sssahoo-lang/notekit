@@ -6,10 +6,10 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Postgres](https://img.shields.io/badge/Postgres_16-pgvector-4169E1?logo=postgresql&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js_16-000000?logo=nextdotjs&logoColor=white)
-![Faithfulness](https://img.shields.io/badge/faithfulness-87.7%E2%80%9391.1%25-15803D)
+![Faithfulness](https://img.shields.io/badge/faithfulness-90.5%25-15803D)
 ![Refusal accuracy](https://img.shields.io/badge/refusal_accuracy-100%25-15803D)
 [![CI](https://github.com/sssahoo-lang/notekit/actions/workflows/ci.yml/badge.svg)](https://github.com/sssahoo-lang/notekit/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-193_passing-15803D)
+![Tests](https://img.shields.io/badge/tests-264_passing-15803D)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Most AI study tools always give you an answer. You cannot tell which sentences
@@ -69,6 +69,9 @@ produces the first of those numbers is itself in the repository, and the
   relevant.
 - **Exports to Markdown** as linked notes, one file per section with a page per
   source, readable in Obsidian or any editor.
+- **Shows you the outline first.** Planning costs a fraction of a cent, so the
+  syllabus is shown for renaming, reordering and editing before any section is
+  written. Most "not what I asked for" outcomes are decided there.
 - **Draws diagrams** as Mermaid, so every node and edge is a claim that gets
   scored like the prose.
 
@@ -79,24 +82,23 @@ a 13-document corpus from Wikipedia and arXiv:
 
 | Metric | Result |
 |---|---|
-| **Faithfulness**, claims entailed by retrieved passages | **87.7-91.1%** across two runs, see below |
+| **Faithfulness**, claims entailed by retrieved passages | **90.5%** (90.0-91.3% across three runs, spread 1.2 points) |
 | **Refusal accuracy**, out-of-corpus questions correctly declined | **100%** (16/16) |
 | Cost per course | $0.22-0.38 ($0.34 with practice questions) |
 | Time to first prose | 18.4s · full course 41.2s |
 | Coverage, learning goals addressed | 42-67%, see [Limitations](#limitations-and-what-isnt-proven) |
 
 **About that faithfulness figure.** An earlier round of runs on this fixture
-averaged 95.3% and ranged 93.0-97.6%. Two runs made since, one of them on the
-code as it stood before any of the recent changes, came in at 87.7% and 91.1%.
-The gap between those two is 3.4 points, inside the run-to-run variation this
-fixture is already known to show, so a single pair of runs cannot separate a
-real change from noise. What it can say is that the earlier range has not
-reproduced, and the honest number to quote is the one that has.
+averaged 95.3%. Two single runs made later came in at 87.7% and 91.1%, which
+left the real number unresolved, so it was measured properly: three runs on
+the same fixture and corpus, with the current prompt, gave 90.1%, 91.3% and
+90.0%. A 1.2-point spread across three runs is tight enough to quote, and
+90.5% is what the table now says. The earlier 95.3% did not reproduce, and a
+project about verifying claims should not keep quoting a number that does not.
 
-Settling it needs `--repeat 3` on both sides, which is queued rather than done.
-Reporting a figure that fails to reproduce would be a strange thing for a
-project about verifying claims to do, so the table above states what
-measured and this paragraph states what is unresolved.
+Coverage on the same three runs was 33%, 58% and 50%: a 25-point spread from a
+handful of goals and a non-deterministic judge, which is why it is reported as
+a range and treated as the weakest number here.
 
 Refusal is calibrated from data rather than guessed. Questions the corpus covers
 rerank at +0.28 to +8.50; questions it does not (the French Revolution,
@@ -278,6 +280,13 @@ labelled probes, and abstention is scored like any other behaviour.
 notes into atomic claims and checks each for entailment against the retrieved
 passages. Diagrams are included: every Mermaid edge becomes a claim.
 
+**A separate number for whether it taught anything.** Faithfulness says nothing
+was invented and coverage says each goal was addressed. A section can satisfy
+both by faithfully reporting, on every goal, that the sources do not cover it,
+and teach nothing; one did. A third judge scores each learning goal 0 to 3
+(not taught, named, explained, taught) so the number that moves when a course
+gets better is distinct from the numbers that move when it gets safer.
+
 **Personalisation that cannot become invention.** Two mechanisms, one rule.
 A style profile learned from a writing sample carries form and never subject
 matter, because pasting someone's notes into the prompt as an exemplar would
@@ -391,7 +400,7 @@ of edges into a source means "how many claims rest on this document".
 uv run pytest
 ```
 
-157 tests, no API key and no database. Every module here is either pure logic
+208 tests, no API key and no database. Every module here is either pure logic
 or has its one external dependency (the LLM call, Postgres, the embedding
 model) faked at the boundary, so the whole suite runs offline in under a
 second. Covers topic-identity merging at the 0.86 threshold (exact match,
@@ -423,7 +432,7 @@ a network.
 Every model call funnels through `llm.py`, so [Langfuse](https://langfuse.com)
 hooks in at one place, with each call labelled by purpose (`plan-syllabus`,
 `write-notes`, `quiz`, `judge-extract-claims`, `judge-verdicts`,
-`judge-coverage`, `explain-selection`, `learn-style`) carrying tokens, cache
+`judge-coverage`, `judge-teaching`, `explain-selection`, `learn-style`) carrying tokens, cache
 reads, latency and errors.
 
 It is off unless `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set, and
@@ -709,18 +718,19 @@ is why Wikipedia is fetched alongside it.
 | 8. Markdown export: courses as linked notes | done |
 | 9. Per-course control over the form of the notes | done, effect not yet measured |
 | 10. Corpus expiry and recency-aware fetching | done, effect not yet measured |
+| 11. Outline review before writing | done |
+| 12. Teaching judge, alongside faithfulness and coverage | done, on the eval lane |
 
-Beyond the milestones: 193 tests run in CI on every push, 157 on the Python
-logic layer and 36 on the web one, and every citation the export writes is
+Beyond the milestones: 264 tests run in CI on every push, 208 on the Python
+logic layer and 56 on the web one, and every citation the export writes is
 verified to resolve to a real source passage.
 
-Three things are built but unmeasured, and are called out here rather than
-counted as finished. The faithfulness range above needs `notekit eval
---repeat 3` to settle (see [Results](#results)). Whether the writing controls
-change the notes as intended, and whether asking sources for recent work
-improves a course, are both eval questions rather than build ones. The
-export's Obsidian-specific rendering (block-reference jumps, collapsed
-callouts) has not been confirmed inside Obsidian itself.
+Some things are built but unmeasured, and are called out here rather than
+counted as finished. Whether the writing controls change the notes as
+intended, whether asking sources for recent work improves a course, and what
+the teaching judge says about a typical course, are eval questions rather
+than build ones. The export's Obsidian-specific rendering (block-reference
+jumps, collapsed callouts) has not been confirmed inside Obsidian itself.
 
 Built with Python, FastAPI, Postgres/pgvector, the Anthropic API, LangGraph,
 Langfuse, sentence-transformers, Next.js, React and TypeScript.
