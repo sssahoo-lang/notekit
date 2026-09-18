@@ -58,3 +58,24 @@ def test_a_syllabus_with_too_many_sections_is_refused(client, monkeypatch):
     monkeypatch.setattr(api.courses, "spent_today", lambda u: 0.0)
     r = client.post("/api/course", json={"goal": "x", "user": "u", "syllabus": outline(9).model_dump()})
     assert r.status_code == 422
+
+
+def test_struck_documents_reach_generation(client, monkeypatch):
+    seen = {}
+    async def capture(request):
+        seen["excluded"] = request.excluded_documents
+        yield {"type": "done"}
+    monkeypatch.setattr(api, "_course_events_saving", capture)
+    monkeypatch.setattr(api.courses, "spent_today", lambda u: 0.0)
+    r = client.post("/api/course", json={"goal": "x", "user": "u", "excluded_documents": [4, 8]})
+    assert r.status_code == 200 and seen["excluded"] == [4, 8]
+
+
+def test_adding_a_link_refuses_a_private_address(client, monkeypatch):
+    r = client.post("/api/sources/url", json={"url": "http://127.0.0.1:5433/", "namespace": "q-learning", "user": "u"})
+    assert r.status_code == 422
+
+
+def test_adding_a_link_to_another_readers_uploads_is_refused(client):
+    r = client.post("/api/sources/url", json={"url": "https://example.com/", "namespace": "user-someoneelse-ml", "user": "u"})
+    assert r.status_code == 404

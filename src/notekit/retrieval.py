@@ -16,7 +16,11 @@ _RRF_K = 60
 
 
 def retrieve(
-    *, query: str, namespace: str, cfg: config.RetrievalConfig | None = None
+    *,
+    query: str,
+    namespace: str,
+    cfg: config.RetrievalConfig | None = None,
+    exclude: list[int] | None = None,
 ) -> list[Chunk]:
     cfg = cfg or config.EMBEDDING
 
@@ -26,9 +30,10 @@ def retrieve(
             namespace=namespace,
             query_vec=embedding.embed_query(query, cfg),
             k=cfg.dense_k,
+            exclude=exclude,
         )
         sparse = db.search_sparse(
-            conn, namespace=namespace, query=query, k=cfg.sparse_k
+            conn, namespace=namespace, query=query, k=cfg.sparse_k, exclude=exclude
         )
 
     fused = _reciprocal_rank_fusion(dense, sparse)
@@ -60,6 +65,7 @@ def retrieve_multi(
     namespace: str,
     cfg: config.RetrievalConfig | None = None,
     limit: int | None = None,
+    exclude: list[int] | None = None,
 ) -> list[Chunk]:
     """Retrieve for several related queries and merge the results.
 
@@ -75,7 +81,7 @@ def retrieve_multi(
 
     best: dict[int, Chunk] = {}
     for query in queries:
-        for chunk in retrieve(query=query, namespace=namespace, cfg=cfg):
+        for chunk in retrieve(query=query, namespace=namespace, cfg=cfg, exclude=exclude):
             existing = best.get(chunk.id)
             if existing is None or chunk.score > existing.score:
                 best[chunk.id] = chunk

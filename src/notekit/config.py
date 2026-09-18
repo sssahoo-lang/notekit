@@ -68,6 +68,7 @@ RATE_LIMITS = {
     # endpoint: (requests, per_seconds)
     "course": (10, 3600),
     "plan": (30, 3600),
+    "sources": (30, 3600),
     "explain": (60, 3600),
     "upload": (20, 3600),
 }
@@ -76,6 +77,10 @@ RATE_LIMITS = {
 # one request can take. 25 MB is a long PDF; a textbook scan is out of scope.
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_UPLOAD_FILES = 20
+
+# A page the reader adds by link is fetched by the server. The cap bounds what
+# one link can occupy; the address checks live in sources.py.
+URL_FETCH_MAX_BYTES = 10 * 1024 * 1024
 MAX_TOKENS_PLAN = 2000
 MAX_TOKENS_QUIZ = 3000
 MAX_TOKENS_EXPLAIN = 800

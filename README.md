@@ -72,13 +72,20 @@ produces the first of those numbers is itself in the repository, and the
 - **Shows you the outline first.** Planning costs a fraction of a cent, so the
   syllabus is shown for renaming, reordering and editing before any section is
   written. Most "not what I asked for" outcomes are decided there.
+- **Shows you the sources too.** While the outline is under review, the corpus
+  it will be written from is gathered and listed. Strike a document and this
+  course ignores it (the shared corpus is untouched); paste a link and the page
+  is fetched, indexed and citable.
 - **Draws diagrams** as Mermaid, so every node and edge is a claim that gets
   scored like the prose.
 
 ## Results
 
 Measured over a fixed syllabus (`fixtures/q-learning.json`, 4 sections) against
-a 13-document corpus from Wikipedia and arXiv:
+the q-learning corpus as it stood at the time, 13 documents from Wikipedia and
+arXiv. Corpora now grow as later syllabi on a subject ask new questions, so the
+same command today runs against a larger corpus; the figures below are tied to
+the corpus they were measured on.
 
 | Metric | Result |
 |---|---|
@@ -722,6 +729,7 @@ is why Wikipedia is fetched alongside it.
 | 10. Corpus expiry and recency-aware fetching | done, effect not yet measured |
 | 11. Outline review before writing | done |
 | 12. Teaching judge, alongside faithfulness and coverage | done, in the eval lane and the course map |
+| 13. Sources shown and editable at review: strike a document, add a link | done |
 
 Beyond the milestones: 264 tests run in CI on every push, 208 on the Python
 logic layer and 56 on the web one, and every citation the export writes is

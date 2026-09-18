@@ -23,6 +23,8 @@ import {
   listCourses,
   resumeCourse,
   saveProgress,
+  addSourceUrl,
+  gatherSources,
   planCourse,
   streamCourse,
 } from "@/lib/api";
@@ -44,6 +46,7 @@ import type {
   NotePreferences,
   SavedCourse,
   SavedCourseSummary,
+  SourceDocument,
   Syllabus,
 } from "@/lib/types";
 
@@ -218,6 +221,12 @@ export function CourseWorkspace() {
   // written yet, and the reader may still walk away for free.
   const [review, setReview] = useState<Syllabus | null>(null);
   const [planning, setPlanning] = useState(false);
+  // The corpus behind the outline under review, gathered as soon as the
+  // outline appears, and the documents the reader has struck from it.
+  const [reviewSources, setReviewSources] = useState<SourceDocument[] | null>(null);
+  const [reviewSourcesError, setReviewSourcesError] = useState<string | null>(null);
+  const [reviewNamespace, setReviewNamespace] = useState<string | null>(null);
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [hasStyle, setHasStyle] = useState(false);
   const [phase, setPhase] = useState<RunPhase>("idle");
   const [detail, setDetail] = useState("");
@@ -549,6 +558,25 @@ export function CourseWorkspace() {
         preferences: Object.keys(prefs).length ? prefs : null,
       });
       setReview(outline);
+      setReviewSources(null);
+      setReviewSourcesError(null);
+      setExcluded(new Set());
+      // Gathering may take minutes for a new subject, so it runs beside the
+      // outline rather than before it; the reader edits while it fetches.
+      // Sections renamed during review do not change what is fetched, which
+      // is written from the planner's queries, so this need not re-run.
+      void gatherSources({
+        syllabus: outline,
+        user: userId,
+        namespace: effectiveSource === AUTO_SOURCE ? null : uploadNs,
+      })
+        .then(({ namespace, documents }) => {
+          setReviewNamespace(namespace);
+          setReviewSources(documents);
+        })
+        .catch((err) =>
+          setReviewSourcesError(err instanceof Error ? err.message : String(err)),
+        );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -585,6 +613,7 @@ export function CourseWorkspace() {
             preferences: Object.keys(prefs).length ? prefs : null,
             namespace: effectiveSource === AUTO_SOURCE ? null : uploadNs,
             syllabus,
+            excluded_documents: [...excluded],
           },
           controller.signal,
         ),
@@ -667,6 +696,24 @@ export function CourseWorkspace() {
                 onChange={setReview}
                 onConfirm={() => void generate(review)}
                 onBack={() => setReview(null)}
+                sources={reviewSources}
+                sourcesError={reviewSourcesError}
+                excluded={excluded}
+                onToggleSource={(id) =>
+                  setExcluded((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  })
+                }
+                onAddUrl={async (url) => {
+                  if (!reviewNamespace) throw new Error("Sources are still being gathered.");
+                  const doc = await addSourceUrl({ url, namespace: reviewNamespace, user: userId });
+                  setReviewSources((prev) =>
+                    prev && !prev.some((d) => d.id === doc.id) ? [...prev, doc] : prev,
+                  );
+                }}
               />
             ) : (
             <CourseForm

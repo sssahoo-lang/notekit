@@ -38,6 +38,16 @@ export type Syllabus = {
   modules: SyllabusModule[];
 };
 
+/** One document in a course's corpus, as shown for review. */
+export type SourceDocument = {
+  id: number;
+  source: string;
+  title: string;
+  url: string | null;
+  chunks: number;
+  already_indexed?: boolean;
+};
+
 export type CourseRequest = {
   goal: string;
   namespace?: string | null;
@@ -49,6 +59,8 @@ export type CourseRequest = {
   preferences?: NotePreferences | null;
   /** A reviewed outline. Planning is skipped and the course follows it. */
   syllabus?: Syllabus | null;
+  /** Documents struck during review. Retrieval for this course ignores them. */
+  excluded_documents?: number[];
 };
 
 export type CourseProgress = {

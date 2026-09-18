@@ -1,10 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Syllabus, SyllabusModule } from "@/lib/types";
+import { useState } from "react";
+
+import type { SourceDocument, Syllabus, SyllabusModule } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,11 +30,195 @@ type Props = {
   onChange: (next: Syllabus) => void;
   onConfirm: () => void;
   onBack: () => void;
+  /** null while gathering; the list once the corpus exists. */
+  sources: SourceDocument[] | null;
+  sourcesError: string | null;
+  excluded: Set<number>;
+  onToggleSource: (id: number) => void;
+  onAddUrl: (url: string) => Promise<void>;
 };
+
+const SOURCE_LABEL: Record<string, string> = {
+  wikipedia: "Wikipedia",
+  arxiv: "arXiv",
+  pubmed: "PubMed",
+  url: "Added by link",
+  upload: "Your files",
+};
+
+/**
+ * The corpus, before it is written from.
+ *
+ * Shown here because every poor section so far traced to the sources rather
+ * than the writer, and the reader never saw them until the notes were done.
+ * Unticking a document strikes it from this course only; the topic corpus
+ * is shared with other readers of the subject and is left as it is.
+ */
+function Sources({
+  sources,
+  error,
+  excluded,
+  onToggle,
+  onAddUrl,
+}: {
+  sources: SourceDocument[] | null;
+  error: string | null;
+  excluded: Set<number>;
+  onToggle: (id: number) => void;
+  onAddUrl: (url: string) => Promise<void>;
+}) {
+  const [url, setUrl] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!url.trim() || adding) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      await onAddUrl(url.trim());
+      setUrl("");
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  const groups = new Map<string, SourceDocument[]>();
+  for (const d of sources ?? []) {
+    groups.set(d.source, [...(groups.get(d.source) ?? []), d]);
+  }
+  const kept = (sources ?? []).filter((d) => !excluded.has(d.id)).length;
+
+  return (
+    <div className="mt-6 border-t border-border/70 pt-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-medium text-ink">What it will be written from</h3>
+        {sources ? (
+          <span className="text-xs text-muted-foreground">
+            {kept} of {sources.length} documents kept
+          </span>
+        ) : null}
+      </div>
+
+      {error ? (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {error}
+        </p>
+      ) : sources === null ? (
+        <p role="status" className="mt-2 text-sm text-muted-foreground">
+          Gathering sources. A subject seen before is instant; a new one takes a
+          few minutes of fetching and indexing.
+        </p>
+      ) : sources.length === 0 ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Nothing was found. Add a link below, or the course will refuse
+          sections it cannot support.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-4">
+          {[...groups.entries()].map(([source, docs]) => (
+            <div key={source}>
+              <div className="font-mono text-[0.65rem] tracking-[0.14em] text-muted-foreground uppercase">
+                {SOURCE_LABEL[source] ?? source}
+              </div>
+              <ul className="mt-1.5 space-y-1">
+                {docs.map((d) => {
+                  const on = !excluded.has(d.id);
+                  return (
+                    <li key={d.id} className="flex items-start gap-2.5">
+                      <Checkbox
+                        id={`src-${d.id}`}
+                        checked={on}
+                        onCheckedChange={() => onToggle(d.id)}
+                        className="mt-0.5"
+                      />
+                      <Label
+                        htmlFor={`src-${d.id}`}
+                        className={cn(
+                          "min-w-0 flex-1 text-sm font-normal leading-snug",
+                          !on && "text-muted-foreground line-through",
+                        )}
+                      >
+                        <span className="line-clamp-2">{d.title}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {d.chunks} passage{d.chunks === 1 ? "" : "s"}
+                          {d.url ? (
+                            <>
+                              {" · "}
+                              <a
+                                href={d.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="underline-offset-2 hover:underline"
+                              >
+                                open
+                              </a>
+                            </>
+                          ) : null}
+                        </span>
+                      </Label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {sources !== null && !error ? (
+        <div className="mt-4">
+          <Label htmlFor="add-url" className="text-xs text-muted-foreground">
+            Add a page or PDF by link
+          </Label>
+          <div className="mt-1 flex gap-2">
+            <Input
+              id="add-url"
+              value={url}
+              placeholder="https://"
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void submit();
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void submit()}
+              disabled={!url.trim() || adding}
+            >
+              {adding ? "Fetching…" : "Add"}
+            </Button>
+          </div>
+          {addError ? (
+            <p role="alert" className="mt-1.5 text-sm text-destructive">
+              {addError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 const MAX_SECTIONS = 8;
 
-export function SyllabusReview({ syllabus, onChange, onConfirm, onBack }: Props) {
+export function SyllabusReview({
+  syllabus,
+  onChange,
+  onConfirm,
+  onBack,
+  sources,
+  sourcesError,
+  excluded,
+  onToggleSource,
+  onAddUrl,
+}: Props) {
   const modules = syllabus.modules;
 
   const setModule = (index: number, patch: Partial<SyllabusModule>) =>
@@ -181,6 +368,14 @@ export function SyllabusReview({ syllabus, onChange, onConfirm, onBack }: Props)
             </span>
           ) : null}
         </div>
+
+        <Sources
+          sources={sources}
+          error={sourcesError}
+          excluded={excluded}
+          onToggle={onToggleSource}
+          onAddUrl={onAddUrl}
+        />
 
         <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 pt-5">
           <Button onClick={onConfirm} disabled={!valid} size="lg" className="w-full sm:w-auto">

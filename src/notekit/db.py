@@ -264,8 +264,19 @@ def get_chunks_by_ids(conn: psycopg.Connection, chunk_ids: list[int]) -> list[di
 
 
 def search_dense(
-    conn: psycopg.Connection, *, namespace: str, query_vec: list[float], k: int
+    conn: psycopg.Connection,
+    *,
+    namespace: str,
+    query_vec: list[float],
+    k: int,
+    exclude: list[int] | None = None,
 ) -> list[dict]:
+    """Nearest chunks by embedding.
+
+    `exclude` is a list of document ids the reader struck from this course's
+    sources. It is a filter rather than a deletion because a topic corpus is
+    shared: one reader dropping a junk paper must not remove it for everyone.
+    """
     if k <= 0:
         return []
     return conn.execute(
@@ -275,15 +286,21 @@ def search_dense(
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
         WHERE c.namespace = %s AND c.embedding IS NOT NULL
+          AND NOT (c.document_id = ANY(%s::bigint[]))
         ORDER BY c.embedding <=> %s::vector
         LIMIT %s
         """,
-        (query_vec, namespace, query_vec, k),
+        (query_vec, namespace, list(exclude or []), query_vec, k),
     ).fetchall()
 
 
 def search_sparse(
-    conn: psycopg.Connection, *, namespace: str, query: str, k: int
+    conn: psycopg.Connection,
+    *,
+    namespace: str,
+    query: str,
+    k: int,
+    exclude: list[int] | None = None,
 ) -> list[dict]:
     if k <= 0:
         return []
@@ -294,8 +311,26 @@ def search_sparse(
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
         WHERE c.namespace = %s AND c.tsv @@ plainto_tsquery('english', %s)
+          AND NOT (c.document_id = ANY(%s::bigint[]))
         ORDER BY score DESC
         LIMIT %s
         """,
-        (query, namespace, query, k),
+        (query, namespace, query, list(exclude or []), k),
     ).fetchall()
+
+
+def list_documents(conn: psycopg.Connection, namespace: str) -> list[dict]:
+    """Every document in a namespace with its chunk count, for the reader."""
+    return [
+        dict(r)
+        for r in conn.execute(
+            """
+            SELECT d.id, d.source, d.title, d.url,
+                   (SELECT count(*) FROM chunks c WHERE c.document_id = d.id) AS chunks
+            FROM documents d
+            WHERE d.namespace = %s
+            ORDER BY d.source, d.title
+            """,
+            (namespace,),
+        ).fetchall()
+    ]

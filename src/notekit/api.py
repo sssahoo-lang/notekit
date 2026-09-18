@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import httpx
 import tempfile
 import time
 from collections.abc import AsyncIterator
@@ -33,6 +34,7 @@ from . import (
     explain,
     llm,
     retrieval,
+    sources,
     style,
     upload,
 )
@@ -231,6 +233,22 @@ class CourseRequest(BaseModel):
     # A syllabus the reader has already reviewed. Planning is skipped and the
     # course is written to exactly this outline.
     syllabus: Syllabus | None = None
+    # Documents the reader struck during review. Retrieval for this course
+    # ignores them; the shared corpus is untouched.
+    excluded_documents: list[int] = []
+
+
+class SourcesRequest(BaseModel):
+    syllabus: Syllabus
+    user: str | None = None
+    namespace: str | None = None
+    limit: int = 10
+
+
+class AddUrlRequest(BaseModel):
+    url: str
+    namespace: str
+    user: str | None = None
 
 
 class PlanRequest(BaseModel):
@@ -320,6 +338,7 @@ async def _run_job(
     only_indices: set[int] | None,
     existing_modules: dict[int, dict] | None,
     preferences: NotePreferences | None = None,
+    excluded_documents: list[int] | None = None,
 ) -> None:
     """Generate modules and persist; independent of any SSE subscriber."""
     profile = (
@@ -382,6 +401,7 @@ async def _run_job(
             namespace=namespace,
             style=profile,
             prefs=preferences,
+            exclude=excluded_documents or None,
             syllabus=syllabus,
             cancel_event=job.cancel,
             only_indices=only_indices,
@@ -492,6 +512,7 @@ def _start_job(
     only_indices: set[int] | None = None,
     existing_modules: dict[int, dict] | None = None,
     preferences: NotePreferences | None = None,
+    excluded_documents: list[int] | None = None,
 ) -> _CourseJob:
     existing = _jobs.get(course_id)
     if existing and existing.task and not existing.task.done():
@@ -512,6 +533,7 @@ def _start_job(
             only_indices=only_indices,
             existing_modules=existing_modules,
             preferences=preferences,
+            excluded_documents=excluded_documents,
         )
     )
     _jobs[course_id] = job
@@ -564,6 +586,7 @@ async def _course_events_saving(request: CourseRequest) -> AsyncIterator[dict]:
             if request.preferences and not request.preferences.is_empty()
             else None
         ),
+        excluded_documents=request.excluded_documents or None,
     )
     yield {"type": "saved", "id": course_id}
 
@@ -578,6 +601,7 @@ async def _course_events_saving(request: CourseRequest) -> AsyncIterator[dict]:
         namespace=request.namespace,
         preferences=request.preferences,
         syllabus=request.syllabus,
+        excluded_documents=request.excluded_documents,
     )
     async for event in _subscribe_events(job):
         yield event
@@ -645,6 +669,7 @@ async def _resume_events(course_id: int) -> AsyncIterator[dict]:
             if course.get("preferences")
             else None
         ),
+        excluded_documents=course.get("excluded_documents") or None,
     )
     async for event in _subscribe_events(job):
         yield event
@@ -832,6 +857,41 @@ def plan(request: PlanRequest) -> Syllabus:
     llm.reset_usage()
     level = request.preferences.level if request.preferences else None
     return plan_syllabus(request.goal, level=level)
+
+
+@app.post("/api/sources")
+async def gather_sources(request: SourcesRequest) -> dict:
+    """Fetch the corpus an outline needs, and return what it holds.
+
+    Runs in a thread because a new subject means minutes of downloading and
+    embedding, none of which should sit on the event loop.
+    """
+    caller = request.user or "anonymous"
+    _throttle("sources", caller)
+    if request.namespace:
+        _ensure_namespace_access(request.namespace, caller)
+    return await asyncio.to_thread(
+        sources.gather,
+        request.syllabus,
+        namespace=request.namespace,
+        limit=request.limit,
+    )
+
+
+@app.post("/api/sources/url")
+async def add_source_url(request: AddUrlRequest) -> dict:
+    """Index one page or PDF the reader chose, into the course's corpus."""
+    caller = request.user or "anonymous"
+    _throttle("sources", caller)
+    _ensure_namespace_access(request.namespace, caller)
+    try:
+        return await asyncio.to_thread(sources.add_url, request.url, namespace=request.namespace)
+    except sources.UnsafeUrl as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Could not fetch that link: {exc}") from exc
 
 
 @app.get("/api/search")

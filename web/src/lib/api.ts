@@ -6,6 +6,7 @@ import type {
   NotePreferences,
   SavedCourse,
   SavedCourseSummary,
+  SourceDocument,
   StyleProfile,
   Syllabus,
   UploadResult,
@@ -322,6 +323,36 @@ export async function planCourse(input: {
   preferences?: NotePreferences | null;
 }): Promise<Syllabus> {
   const res = await request(`/api/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+/** Fetch the corpus an outline needs and list it. Slow for a new subject. */
+export async function gatherSources(input: {
+  syllabus: Syllabus;
+  user: string;
+  namespace?: string | null;
+}): Promise<{ namespace: string; documents: SourceDocument[] }> {
+  const res = await request(`/api/sources`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+/** Index one page or PDF the reader chose into the course's corpus. */
+export async function addSourceUrl(input: {
+  url: string;
+  namespace: string;
+  user: string;
+}): Promise<SourceDocument> {
+  const res = await request(`/api/sources/url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

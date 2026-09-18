@@ -269,6 +269,7 @@ def generate_module_notes(
     with_quiz: bool = False,
     style: StyleProfile | None = None,
     prefs: NotePreferences | None = None,
+    exclude: list[int] | None = None,
 ) -> ModuleNotes:
     """Per-module loop body: retrieve, rerank, generate cited notes."""
     cfg = cfg or config.EMBEDDING
@@ -276,7 +277,10 @@ def generate_module_notes(
     # on the module query gave notes that were faithful but addressed barely
     # half the stated goals, because generation can only cover what it is shown.
     chunks = retrieval.retrieve_multi(
-        [module.query, *module.learning_goals], namespace=namespace, cfg=cfg
+        [module.query, *module.learning_goals],
+        namespace=namespace,
+        cfg=cfg,
+        exclude=exclude,
     )
 
     refusal = _refusal_for(module, chunks)
@@ -387,6 +391,7 @@ async def astream_module_notes(
     with_quiz: bool = False,
     style: StyleProfile | None = None,
     prefs: NotePreferences | None = None,
+    exclude: list[int] | None = None,
 ) -> AsyncIterator[dict]:
     """Same work as `generate_module_notes`, emitted as it is written.
 
@@ -403,6 +408,7 @@ async def astream_module_notes(
         [module.query, *module.learning_goals],
         namespace=namespace,
         cfg=cfg,
+        exclude=exclude,
     )
 
     refusal = _refusal_for(module, chunks)
@@ -539,6 +545,7 @@ async def arun_course_events(
     namespace: str | None = None,
     style: StyleProfile | None = None,
     prefs: NotePreferences | None = None,
+    exclude: list[int] | None = None,
     cancel_event: asyncio.Event | None = None,
     only_indices: set[int] | None = None,
 ) -> AsyncIterator[dict]:
@@ -628,6 +635,7 @@ async def arun_course_events(
                     with_quiz=with_quiz,
                     style=style,
                     prefs=prefs,
+                    exclude=exclude,
                 ):
                     await events.put({**event, "index": index})
         except Exception as exc:  # noqa: BLE001
@@ -683,6 +691,7 @@ def run_course(
     namespace: str | None = None,
     style: StyleProfile | None = None,
     prefs: NotePreferences | None = None,
+    exclude: list[int] | None = None,
 ) -> tuple[Syllabus, list[ModuleNotes]]:
     """Plan, ensure the corpus exists, then run every module concurrently.
 
@@ -735,6 +744,7 @@ def run_course(
                     with_quiz=with_quiz,
                     style=style,
                     prefs=prefs,
+                    exclude=exclude,
                 ),
                 syllabus.modules,
             )
