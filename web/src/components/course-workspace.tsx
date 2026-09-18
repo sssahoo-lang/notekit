@@ -35,12 +35,8 @@ import {
   pickContinueCourse,
 } from "@/lib/course-status";
 import { useCourseNav } from "@/lib/course-nav";
-import {
-  claimAliases,
-  getProfile,
-  greetingName,
-  type Profile,
-} from "@/lib/profile";
+import { useSession } from "@/lib/session";
+import { claimAliases, greetingName } from "@/lib/profile";
 import type {
   CourseEvent,
   ModuleState,
@@ -212,7 +208,6 @@ function applyCourseEvent(
 }
 
 export function CourseWorkspace() {
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [goal, setGoal] = useState("");
   // The planner writes a clean `title` precisely so a reader never sees
   // their own typos back. `goal` is the course-form input and cannot serve
@@ -265,7 +260,9 @@ export function CourseWorkspace() {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const nav = useCourseNav();
 
-  const userId = profile?.id ?? "anonymous";
+  // The account key when signed in, this browser's id otherwise. The server
+  // makes the same choice, so the two cannot disagree about whose data this is.
+  const { userId, account, profile } = useSession();
   const uploads = useMemo(
     () => (profile ? myUploads(sources, profile.id) : []),
     [sources, profile],
@@ -294,12 +291,14 @@ export function CourseWorkspace() {
     resetView();
   }, [nav.homeToken]);
 
-  const refreshLibrary = useCallback(async (p: Profile) => {
+  // Keyed on the session rather than the browser profile: signing in has to
+  // swap the library over, and signing out has to swap it back.
+  const refreshLibrary = useCallback(async () => {
     try {
-      const aliases = claimAliases(p);
+      const aliases = profile && !account ? claimAliases(profile) : [];
       const libraryRows = aliases.length
-        ? await claimCourses(p.id, aliases)
-        : await listCourses(p.id);
+        ? await claimCourses(userId, aliases)
+        : await listCourses(userId);
       setLibrary(libraryRows);
       nav.refreshLibrary();
       return libraryRows;
@@ -309,14 +308,12 @@ export function CourseWorkspace() {
     } finally {
       setLoadingLibrary(false);
     }
-  }, []);
+  }, [userId, profile, account]);
 
   useEffect(() => {
     let cancelled = false;
     Promise.resolve().then(() => {
       if (cancelled) return;
-      const p = getProfile();
-      setProfile(p);
       // Arriving from Materials with a namespace: preselect it, so "build a
       // course from this" lands on a form that is already pointed at it.
       const material = new URLSearchParams(window.location.search).get("material");
@@ -324,15 +321,15 @@ export function CourseWorkspace() {
         setSourceMode(material);
         setUploadNs(material);
       }
-      void refreshLibrary(p);
-      getNamespaces(p.id)
+      void refreshLibrary();
+      getNamespaces(userId)
         .then((rows) => {
           if (!cancelled) setSources(rows);
         })
         .catch(() => {
           if (!cancelled) setSources([]);
         });
-      getStyle(p.id)
+      getStyle(userId)
         .then((s) => {
           if (!cancelled) setHasStyle(!!s);
         })
@@ -352,7 +349,7 @@ export function CourseWorkspace() {
     );
     if (!anyGenerating || !profile) return;
     const id = window.setInterval(() => {
-      void refreshLibrary(profile);
+      void refreshLibrary();
     }, 4000);
     return () => window.clearInterval(id);
   }, [library, profile, refreshLibrary]);
@@ -369,12 +366,12 @@ export function CourseWorkspace() {
           setModules(mapSavedModules(course));
           setCourseStatus(course.generation_status ?? "complete");
           setSummary(course.summary);
-          if (profile) void refreshLibrary(profile);
+          void refreshLibrary();
         })
         .catch(() => undefined);
     }, 3000);
     return () => window.clearInterval(id);
-  }, [activeCourseId, courseStatus, phase, profile, refreshLibrary, userId]);
+  }, [activeCourseId, courseStatus, phase, refreshLibrary, userId]);
 
   const running =
     phase === "planning" || phase === "gathering" || phase === "writing";
@@ -420,7 +417,7 @@ export function CourseWorkspace() {
         modules_read: read,
         bookmark: { module_index: bookmarkIndex, paragraph: bookmarkParagraph },
       });
-      if (profile) void refreshLibrary(profile);
+      void refreshLibrary();
     } catch {
       // Progress is best-effort; reading still works offline of this write.
     }
@@ -470,7 +467,7 @@ export function CourseWorkspace() {
           : "",
       );
       requestAnimationFrame(() => titleRef.current?.focus());
-      if (profile) void refreshLibrary(profile);
+      void refreshLibrary();
 
       // If still generating, attach to the live stream if a job is running.
       if (course.generation_status === "generating") {
@@ -489,14 +486,14 @@ export function CourseWorkspace() {
     try {
       await deleteCourse(id, userId);
       if (id === activeCourseId) resetView();
-      if (profile) void refreshLibrary(profile);
+      void refreshLibrary();
       toast.success(`Deleted “${label}”`, {
         action: {
           label: "Undo",
           onClick: () => {
             void restoreCourse(id, userId)
               .then(() => {
-                if (profile) void refreshLibrary(profile);
+                void refreshLibrary();
                 toast.success("Restored");
               })
               .catch((err) =>
@@ -536,17 +533,17 @@ export function CourseWorkspace() {
     for await (const event of events) {
       applyCourseEvent(event, eventSetters);
       if (event.type === "saved" && profile) {
-        void refreshLibrary(profile);
+        void refreshLibrary();
         setCourseStatus("generating");
       }
       if (event.type === "done") {
         setCourseStatus("complete");
         getNamespaces(userId).then(setSources).catch(() => undefined);
-        if (profile) void refreshLibrary(profile);
+        void refreshLibrary();
       }
       if (event.type === "cancelled") {
         setCourseStatus("partial");
-        if (profile) void refreshLibrary(profile);
+        void refreshLibrary();
       }
     }
   }
@@ -678,7 +675,7 @@ export function CourseWorkspace() {
     }
     abortRef.current?.abort();
     setPhase("done");
-    if (profile) void refreshLibrary(profile);
+    void refreshLibrary();
     toast.message("Generation stopped. What’s ready is saved");
   }
 

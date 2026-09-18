@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { uploadFiles } from "@/lib/api";
-import { getProfile, type Profile } from "@/lib/profile";
+import { useSession } from "@/lib/session";
 
 export function UploadWorkspace() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { userId } = useSession();
   const [topic, setTopic] = useState("notes");
   const [files, setFiles] = useState<FileList | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,15 +23,6 @@ export function UploadWorkspace() {
   const [skipped, setSkipped] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // getProfile() reads localStorage and returns an "anonymous" stub when
-    // window is undefined, so the server render and the client's first paint
-    // agree. Reading it eagerly (e.g. a useState lazy initializer, which also
-    // runs during hydration) would make that first client render disagree
-    // with the server's. That is a hydration mismatch, not a fix.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProfile(getProfile());
-  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,7 +38,7 @@ export function UploadWorkspace() {
     setError(null);
     try {
       const summary = await uploadFiles(
-        profile?.id ?? "anonymous",
+        userId,
         topic.trim() || "notes",
         Array.from(files),
       );

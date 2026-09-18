@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteGate } from "@/components/site-gate";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CourseNavProvider } from "@/lib/course-nav";
+import { SessionProvider } from "@/lib/session";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
@@ -50,6 +51,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             the gate is off, which is always the case locally. */}
         <ThemeProvider>
           <SiteGate>
+            <SessionProvider>
             <CourseNavProvider>
               {/* Sidebar on wide screens; the top header takes over below lg. */}
               <div className="flex min-h-screen">
@@ -60,6 +62,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 </div>
               </div>
             </CourseNavProvider>
+            </SessionProvider>
           </SiteGate>
         </ThemeProvider>
         <Toaster position="bottom-right" />

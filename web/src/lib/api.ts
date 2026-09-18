@@ -123,8 +123,13 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
     options = { ...init, headers };
   }
 
-  const res = await fetch(`${API_BASE}${path}`, options);
-  if (res.status === 401) {
+  // The session is an httpOnly cookie, so every call has to be told to send
+  // it; fetch omits credentials cross-origin by default.
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include", ...options });
+  // Only the instance gate's 401 means "show the password screen". A failed
+  // sign-in is also a 401, and treating it as the gate told someone who had
+  // mistyped their own password to enter the site password instead.
+  if (res.status === 401 && res.headers.get("X-Site-Gate")) {
     // Stale or absent: drop it so the gate prompts again rather than looping.
     clearSiteToken();
     throw new SiteAuthError();
@@ -323,6 +328,64 @@ async function* readSseStream(
       yield JSON.parse(payload) as CourseEvent;
     }
   }
+}
+
+export type Account = {
+  id: number;
+  email: string;
+  display_name: string;
+  /** The storage key this account's courses live under. */
+  key: string;
+};
+
+/** Who the caller is. Answers for signed-out readers too, so there is no error path. */
+export async function whoAmI(): Promise<Account | null> {
+  const res = await request(`/api/me`, { cache: "no-store" });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.signed_in ? (data as Account) : null;
+}
+
+export async function registerAccount(input: {
+  email: string;
+  password: string;
+  display_name?: string;
+  claim?: string[];
+}): Promise<Account> {
+  const res = await request(`/api/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function signIn(input: {
+  email: string;
+  password: string;
+  claim?: string[];
+}): Promise<Account> {
+  const res = await request(`/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function signOut(): Promise<void> {
+  await request(`/api/logout`, { method: "POST" });
+}
+
+export async function setAccountName(display_name: string): Promise<void> {
+  const res = await request(`/api/me`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ display_name }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
 }
 
 /** Own courses and indexed subjects matching the text so far. Instant. */

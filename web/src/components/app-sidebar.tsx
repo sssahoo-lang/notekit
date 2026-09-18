@@ -8,10 +8,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getHealth, listCourses } from "@/lib/api";
+import { getHealth, listCourses, setAccountName, signOut } from "@/lib/api";
 import { courseLabel } from "@/lib/course-status";
 import { useCourseNav } from "@/lib/course-nav";
-import { getProfile, setDisplayName, type Profile } from "@/lib/profile";
+import { useSession } from "@/lib/session";
 import type { SavedCourseSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -39,39 +39,53 @@ function readCount(c: SavedCourseSummary): number {
 export function AppSidebar() {
   const pathname = usePathname();
   const nav = useCourseNav();
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [courses, setCourses] = useState<SavedCourseSummary[]>([]);
   const [ok, setOk] = useState<boolean | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const { account, userId, setAccount } = useSession();
+
+  const statusDot = cn(
+    "size-1.5 shrink-0 rounded-full",
+    ok === true && "bg-primary",
+    ok === false && "bg-destructive",
+    ok === null && "animate-pulse bg-muted-foreground",
+  );
+
+  async function save() {
+    try {
+      await setAccountName(draft);
+      setAccount(account ? { ...account, display_name: draft.trim() } : null);
+    } catch {
+      // A display name is cosmetic; a failure here should not shout.
+    }
+    setEditing(false);
+  }
+
+  async function leave() {
+    await signOut();
+    setAccount(null);
+    nav.goHome();
+  }
 
   useEffect(() => {
     // See upload-workspace.tsx: getProfile() must run post-hydration, not in
     // a lazy initializer, or the server's "anonymous" stub and the client's
     // real profile disagree on first paint.
-    const p = getProfile();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProfile(p);
     getHealth()
       .then(() => setOk(true))
       .catch(() => setOk(false));
   }, []);
 
   useEffect(() => {
-    if (!profile) return;
     let cancelled = false;
-    listCourses(profile.id)
+    listCourses(userId)
       .then((rows) => !cancelled && setCourses(rows))
       .catch(() => !cancelled && setCourses([]));
     return () => {
       cancelled = true;
     };
-  }, [profile, nav.refreshToken]);
-
-  function save() {
-    setProfile(setDisplayName(draft));
-    setEditing(false);
-  }
+  }, [userId, nav.refreshToken]);
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-border/70 bg-sidebar/60 lg:flex xl:w-64">
@@ -161,49 +175,79 @@ export function AppSidebar() {
         <div className="mb-1 flex justify-end">
           <ThemeToggle className="text-muted-foreground hover:text-foreground" />
         </div>
-        {editing ? (
-          <div className="flex items-center gap-1.5">
-            <Label htmlFor="sidebar-name" className="sr-only">
-              Your name
-            </Label>
-            <Input
-              id="sidebar-name"
-              autoFocus
-              value={draft}
-              placeholder="Your name"
-              className="h-8 text-sm"
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") save();
-                if (e.key === "Escape") setEditing(false);
+        {account ? (
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(account.display_name || "");
+                setEditing(true);
               }}
-            />
-            <Button type="button" size="sm" className="h-8" onClick={save}>
-              Save
-            </Button>
+              className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm text-foreground/85">
+                  {account.display_name?.trim() || account.email}
+                </span>
+                {account.display_name?.trim() ? (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {account.email}
+                  </span>
+                ) : null}
+              </span>
+              <span aria-hidden="true" className={statusDot} />
+            </button>
+            {editing ? (
+              <div className="flex items-center gap-1.5 px-2">
+                <Label htmlFor="sidebar-name" className="sr-only">
+                  Your name
+                </Label>
+                <Input
+                  id="sidebar-name"
+                  autoFocus
+                  value={draft}
+                  placeholder="Your name"
+                  className="h-8 text-sm"
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void save();
+                    if (e.key === "Escape") setEditing(false);
+                  }}
+                />
+                <Button type="button" size="sm" className="h-8" onClick={() => void save()}>
+                  Save
+                </Button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void leave()}
+              className="w-full rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              Sign out
+            </button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(profile?.name ?? "");
-              setEditing(true);
-            }}
-            className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <span className="truncate text-sm text-foreground/80">
-              {profile?.name?.trim() || "Add your name"}
-            </span>
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                ok === true && "bg-primary",
-                ok === false && "bg-destructive",
-                ok === null && "animate-pulse bg-muted-foreground",
-              )}
-            />
-          </button>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2 px-2 py-1">
+              <span className="truncate text-xs text-muted-foreground">
+                Saved in this browser only
+              </span>
+              <span aria-hidden="true" className={statusDot} />
+            </div>
+            <Link
+              href="/signin"
+              className="block rounded-md px-2 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/register"
+              className="block rounded-md px-2 py-1.5 text-sm text-foreground/70 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              Create an account
+            </Link>
+          </div>
         )}
         <p className="sr-only" role="status">
           {ok === false ? "NoteKit service unreachable" : ""}

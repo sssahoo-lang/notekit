@@ -69,6 +69,9 @@ produces the first of those numbers is itself in the repository, and the
   relevant.
 - **Exports to Markdown** as linked notes, one file per section with a page per
   source, readable in Obsidian or any editor.
+- **Remembers you.** Email and password accounts, so a library survives a
+  cleared cache and follows you to another machine. Courses built before
+  signing up move across. Using it without an account still works.
 - **Undoes a delete.** Removing a course marks the row and offers it back in
   the toast; a purge clears it a week later.
 - **Suggests as you type.** Your own courses and subjects already gathered
@@ -699,15 +702,18 @@ Best minus worst is 4.4 points against 4.6 points of run-to-run noise. The gap
 is inside the noise; `--repeat 3` or more is needed before concluding anything,
 and the command says so rather than presenting an ordering as a finding.
 
-**No real authentication.** A deployed instance can be put behind one shared
-password, but everyone who gets in shares one identity. Every course, upload
-and search is scoped to the reader id that created it, so a course id alone
-reaches nothing and the namespace listing shows only your own material; each
-reader is held to a daily spend and a request rate, uploads are capped in size
-and count, and new reader ids are full UUIDs rather than eight hex characters.
-But a reader id is still a bearer string taken on trust: whoever holds it is
-that reader. This is isolation between browsers, not access control between
-people, and it needs real auth before more than one person uses it.
+**Authentication, and what it does not cover.** Accounts are email and
+password: scrypt with the cost parameters stored per hash, sessions as random
+tokens kept only as SHA-256 digests and sent as httpOnly cookies, and a reply
+that never distinguishes a wrong password from an unknown address. A session
+decides who the caller is, over anything the client claims to be.
+
+Using the app without an account still works, and that path is still the old
+one: a reader id minted by the browser, taken on trust, which is isolation
+between browsers rather than access control between people. What is missing
+from the account path is everything around the edges: no email verification,
+no password reset, no second factor. A forgotten password currently means a
+lost library.
 
 **Other gaps.** Scanned PDFs are rejected rather than OCR'd. Topic
 canonicalisation relies on the planner emitting a consistent slug, so close
@@ -737,6 +743,7 @@ is why Wikipedia is fetched alongside it.
 | 13. Sources shown and editable at review: strike a document, add a link | done |
 | 14. Goal suggestions while typing; a section that overruns its length is retried once | done |
 | 15. Deleting is reversible; library cards carry the teaching score; phone layout fixed | done |
+| 16. Accounts: register, sign in, sessions, and courses that follow the person | done |
 
 Beyond the milestones: 264 tests run in CI on every push, 208 on the Python
 logic layer and 56 on the web one, and every citation the export writes is

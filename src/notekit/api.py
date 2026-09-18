@@ -19,12 +19,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import (
+    accounts,
     auth,
     calibration,
     config,
@@ -127,7 +128,13 @@ async def site_password_gate(request, call_next):
 
     if not auth.check_token(request.headers.get(auth.HEADER)):
         return JSONResponse(
-            {"detail": "This instance is password protected."}, status_code=401
+            {"detail": "This instance is password protected."},
+            status_code=401,
+            # Marks this as the instance gate rather than a sign-in failure.
+            # Both are 401s, and without something to tell them apart the
+            # client showed "enter the site password" to someone who had
+            # simply mistyped their own.
+            headers={auth.GATE_HEADER: "1"},
         )
     return await call_next(request)
 
@@ -140,6 +147,47 @@ async def site_password_gate(request, call_next):
 # course was reachable by anyone who could count.
 
 _rate_windows: dict[tuple[str, str], list[float]] = {}
+
+
+def _signed_in(request: Request) -> dict | None:
+    """The account behind this request's session cookie, if there is one."""
+    return accounts.session_user(request.cookies.get(accounts.SESSION_COOKIE))
+
+
+def _caller(request: Request, user: str | None = None) -> str:
+    """The storage key this request acts as.
+
+    A session wins over anything the client says it is. Without one the old
+    browser id still works, so the app is usable without an account and a
+    reader who had courses before accounts existed does not lose them.
+    """
+    account = _signed_in(request)
+    if account:
+        return accounts.account_key(account["id"])
+    if not user:
+        raise HTTPException(422, "Sign in, or send a reader id.")
+    return normalize(user)
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        accounts.SESSION_COOKIE,
+        token,
+        max_age=accounts.SESSION_DAYS * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=_COOKIE_SECURE,
+        path="/",
+    )
+
+
+def _account_payload(account: dict, key: str) -> dict:
+    return {
+        "id": account["id"],
+        "email": account["email"],
+        "display_name": account["display_name"],
+        "key": key,
+    }
 
 
 def _owned(course_id: int, user: str) -> dict:
@@ -220,9 +268,19 @@ _origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
+    # The session is a cookie, so the browser only sends it when asked to, and
+    # only to the origins named above. A wildcard origin is not allowed with
+    # credentials, which is the rule doing the work here.
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Response headers are hidden from page scripts unless named here.
+    expose_headers=[auth.GATE_HEADER],
 )
+
+# Cookies are marked Secure off a real deployment; over plain http on localhost
+# a Secure cookie would simply never be sent.
+_COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "").strip().lower() in {"1", "true", "yes"}
 
 
 class CourseRequest(BaseModel):
@@ -240,6 +298,30 @@ class CourseRequest(BaseModel):
     # Documents the reader struck during review. Retrieval for this course
     # ignores them; the shared corpus is untouched.
     excluded_documents: list[int] = []
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    display_name: str = ""
+    # Browser ids used before signing up. Their courses move to the account, so
+    # signing up does not look like losing everything.
+    claim: list[str] = []
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+    claim: list[str] = []
+
+
+class DisplayNameRequest(BaseModel):
+    display_name: str
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class SourcesRequest(BaseModel):
@@ -690,7 +772,7 @@ def health() -> dict:
 
 
 @app.get("/api/namespaces")
-def namespaces(user: str = "anonymous") -> list[dict]:
+def namespaces(request: Request, user: str = "anonymous") -> list[dict]:
     """Namespaces the caller may build from: shared topics and their own uploads.
 
     Listing every namespace handed out the reader id of everyone who had ever
@@ -710,7 +792,7 @@ def namespaces(user: str = "anonymous") -> list[dict]:
             ORDER BY d.namespace
             """
         ).fetchall()
-    mine = f"user-{normalize(user)}-"
+    mine = f"user-{_caller(request, user)}-"
     return [
         dict(r)
         for r in rows
@@ -719,25 +801,30 @@ def namespaces(user: str = "anonymous") -> list[dict]:
 
 
 @app.get("/api/courses")
-def list_courses(user: str = "anonymous") -> list[dict]:
-    """Saved courses for a user, most recently opened first."""
-    return courses.list_for_user(normalize(user))
+def list_courses(request: Request, user: str = "anonymous") -> list[dict]:
+    """Saved courses for the caller, most recently opened first."""
+    return courses.list_for_user(_caller(request, user))
 
 
 @app.post("/api/courses/claim")
-def claim_courses(request: ClaimRequest) -> dict:
-    """Reassign courses from old browser identities to the current one."""
-    moved = courses.claim(request.aliases, request.user)
+def claim_courses(body: ClaimRequest, request: Request) -> dict:
+    """Reassign courses from old browser identities onto the caller.
+
+    The destination is the caller, never the body: otherwise anyone could
+    claim another reader's courses by naming them here.
+    """
+    caller = _caller(request, body.user)
+    moved = courses.claim(body.aliases, caller)
     return {
         "moved": moved,
-        "user": normalize(request.user),
-        "courses": courses.list_for_user(request.user),
+        "user": caller,
+        "courses": courses.list_for_user(caller),
     }
 
 
 @app.get("/api/courses/{course_id}")
-def get_course(course_id: int, user: str) -> dict:
-    row = _owned(course_id, user)
+def get_course(course_id: int, request: Request, user: str | None = None) -> dict:
+    row = _owned(course_id, _caller(request, user))
     # Reopening counts as activity, so "continue studying" tracks what you are
     # actually reading rather than what you generated most recently.
     courses.touch(course_id)
@@ -745,12 +832,14 @@ def get_course(course_id: int, user: str) -> dict:
 
 
 @app.patch("/api/courses/{course_id}/progress")
-def set_progress(course_id: int, request: ProgressRequest) -> dict:
+def set_progress(
+    course_id: int, body: ProgressRequest, request: Request
+) -> dict:
     """Record which modules have been read and where the bookmark sits."""
-    _owned(course_id, request.user)
+    _owned(course_id, _caller(request, body.user))
     updated = courses.set_progress(
         course_id,
-        {"modules_read": sorted(set(request.modules_read)), "bookmark": request.bookmark},
+        {"modules_read": sorted(set(body.modules_read)), "bookmark": body.bookmark},
     )
     if not updated:
         raise HTTPException(404, f"course {course_id} not found")
@@ -758,9 +847,11 @@ def set_progress(course_id: int, request: ProgressRequest) -> dict:
 
 
 @app.post("/api/courses/{course_id}/cancel")
-async def cancel_course(course_id: int, user: str) -> dict:
+async def cancel_course(
+    course_id: int, request: Request, user: str | None = None
+) -> dict:
     """Stop background generation; keep whatever modules already finished."""
-    _owned(course_id, user)
+    _owned(course_id, _caller(request, user))
     job = _jobs.get(course_id)
     if job:
         job.cancel.set()
@@ -779,11 +870,14 @@ async def cancel_course(course_id: int, user: str) -> dict:
 
 
 @app.post("/api/courses/{course_id}/resume")
-def resume_course(course_id: int, user: str) -> StreamingResponse:
+def resume_course(
+    course_id: int, request: Request, user: str | None = None
+) -> StreamingResponse:
     """Regenerate missing modules for a partial course."""
-    _owned(course_id, user)
-    _throttle("course", user)
-    _check_budget(user)
+    caller = _caller(request, user)
+    _owned(course_id, caller)
+    _throttle("course", caller)
+    _check_budget(caller)
     return StreamingResponse(
         _sse(_resume_events(course_id)),
         media_type="text/event-stream",
@@ -792,12 +886,13 @@ def resume_course(course_id: int, user: str) -> StreamingResponse:
 
 
 @app.post("/api/explain")
-def explain_selection(request: ExplainRequest) -> dict:
+def explain_selection(body: ExplainRequest, request: Request) -> dict:
     """Explain a highlighted span using that module's own source passages."""
-    course = _owned(request.course_id, request.user)
-    _throttle("explain", request.user)
+    caller = _caller(request, body.user)
+    course = _owned(body.course_id, caller)
+    _throttle("explain", caller)
 
-    passages, found = explain.passages_for_module(course, request.module_index)
+    passages, found = explain.passages_for_module(course, body.module_index)
     if not found:
         raise HTTPException(
             422,
@@ -809,9 +904,9 @@ def explain_selection(request: ExplainRequest) -> dict:
     try:
         answer = explain.explain(
             passages=passages,
-            highlighted=request.highlighted,
-            question=request.question,
-            style=style.load(normalize(request.user)),
+            highlighted=body.highlighted,
+            question=body.question,
+            style=style.load(caller),
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -821,35 +916,41 @@ def explain_selection(request: ExplainRequest) -> dict:
 
 
 @app.post("/api/courses/{course_id}/restore")
-def restore_course(course_id: int, user: str) -> dict:
+def restore_course(
+    course_id: int, request: Request, user: str | None = None
+) -> dict:
     """Undo a delete, while the row is still there to undo."""
-    if not courses.restore(course_id, user_id=user):
+    if not courses.restore(course_id, user_id=_caller(request, user)):
         raise HTTPException(404, f"course {course_id} cannot be restored")
     return {"restored": course_id}
 
 
 @app.delete("/api/courses/{course_id}")
-def delete_course(course_id: int, user: str) -> dict:
-    _owned(course_id, user)
+def delete_course(course_id: int, request: Request, user: str | None = None) -> dict:
+    caller = _caller(request, user)
+    _owned(course_id, caller)
     job = _jobs.get(course_id)
     if job:
         job.cancel.set()
-    ok = courses.delete(course_id, user_id=user)
+    ok = courses.delete(course_id, user_id=caller)
     if not ok:
         raise HTTPException(404, f"course {course_id} not found")
     return {"deleted": course_id}
 
 
 @app.post("/api/course")
-def course(request: CourseRequest) -> StreamingResponse:
+def course(body: CourseRequest, request: Request) -> StreamingResponse:
     """Stream a course as its modules complete; persist when finished."""
-    caller = request.user or "anonymous"
+    caller = _caller(request, body.user)
+    # The course is saved under the caller, so a signed-in reader's courses
+    # follow the account rather than the browser that asked for them.
+    body = body.model_copy(update={"user": caller})
     _throttle("course", caller)
     _check_budget(caller)
-    if request.syllabus is not None and not 1 <= len(request.syllabus.modules) <= 8:
+    if body.syllabus is not None and not 1 <= len(body.syllabus.modules) <= 8:
         raise HTTPException(422, "A course needs between one and eight sections.")
     return StreamingResponse(
-        _sse(_course_events_saving(request)),
+        _sse(_course_events_saving(body)),
         media_type="text/event-stream",
         # Without this, a proxy may buffer the whole stream and defeat the point.
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -907,21 +1008,97 @@ async def add_source_url(request: AddUrlRequest) -> dict:
 
 
 @app.get("/api/suggest")
-def suggest_instant(q: str, user: str = "anonymous") -> dict:
+def suggest_instant(request: Request, q: str, user: str = "anonymous") -> dict:
     """Own courses and indexed subjects matching the text so far. No model call."""
-    return suggest.instant(q, user)
+    return suggest.instant(q, _caller(request, user))
 
 
 @app.get("/api/suggest/related")
-def suggest_related(q: str, user: str = "anonymous") -> dict:
+def suggest_related(request: Request, q: str, user: str = "anonymous") -> dict:
     """Goals a learner typing this might mean. One small model call, cached."""
-    _throttle("suggest", user)
+    _throttle("suggest", _caller(request, user))
     return {"goals": suggest.related(q)}
 
 
+@app.post("/api/register")
+def register_account(request: RegisterRequest, response: Response) -> dict:
+    """Create an account and sign in, carrying this browser's courses across."""
+    try:
+        account = accounts.register(
+            request.email, request.password, request.display_name
+        )
+    except accounts.AccountError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    key = accounts.account_key(account["id"])
+    if request.claim:
+        courses.claim(request.claim, key)
+    _set_session_cookie(response, accounts.start_session(account["id"]))
+    return _account_payload(account, key)
+
+
+@app.post("/api/login")
+def login(request: LoginRequest, response: Response) -> dict:
+    """Sign in. The reply never says which half of the pair was wrong."""
+    _throttle("login", request.email.strip().lower() or "anonymous")
+    account = accounts.authenticate(request.email, request.password)
+    if account is None:
+        raise HTTPException(401, "That email and password do not match.")
+    key = accounts.account_key(account["id"])
+    if request.claim:
+        courses.claim(request.claim, key)
+    _set_session_cookie(response, accounts.start_session(account["id"]))
+    return _account_payload(account, key)
+
+
+@app.post("/api/logout")
+def logout(request: Request, response: Response) -> dict:
+    accounts.end_session(request.cookies.get(accounts.SESSION_COOKIE))
+    response.delete_cookie(accounts.SESSION_COOKIE, path="/")
+    return {"signed_out": True}
+
+
+@app.get("/api/me")
+def me(request: Request) -> dict:
+    """Who this request is. Always answers, so the UI needs no error path."""
+    account = _signed_in(request)
+    if account is None:
+        return {"signed_in": False}
+    return {
+        "signed_in": True,
+        **_account_payload(account, accounts.account_key(account["id"])),
+    }
+
+
+@app.patch("/api/me")
+def update_me(body: DisplayNameRequest, request: Request) -> dict:
+    account = _signed_in(request)
+    if account is None:
+        raise HTTPException(401, "Sign in first.")
+    accounts.set_display_name(account["id"], body.display_name)
+    return {"display_name": body.display_name.strip()}
+
+
+@app.post("/api/me/password")
+def change_password(body: PasswordChangeRequest, request: Request) -> dict:
+    account = _signed_in(request)
+    if account is None:
+        raise HTTPException(401, "Sign in first.")
+    _throttle("login", account["email"])
+    try:
+        accounts.change_password(
+            account["id"], body.current_password, body.new_password
+        )
+    except accounts.AccountError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    # Every session was dropped, including this one.
+    return {"changed": True, "signed_out_everywhere": True}
+
+
 @app.get("/api/search")
-def search(q: str, namespace: str, user: str = "anonymous") -> list[dict]:
-    _ensure_namespace_access(namespace, user)
+def search(
+    request: Request, q: str, namespace: str, user: str = "anonymous"
+) -> list[dict]:
+    _ensure_namespace_access(namespace, _caller(request, user))
     chunks = retrieval.retrieve(query=q, namespace=namespace)
     return [c.model_dump() for c in chunks]
 

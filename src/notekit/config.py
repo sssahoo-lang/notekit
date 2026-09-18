@@ -70,6 +70,8 @@ RATE_LIMITS = {
     "plan": (30, 3600),
     "sources": (30, 3600),
     "suggest": (120, 3600),
+    # Sign-in is the one endpoint worth guessing at, so it is the tightest.
+    "login": (10, 900),
     "explain": (60, 3600),
     "upload": (20, 3600),
 }

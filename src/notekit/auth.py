@@ -29,6 +29,10 @@ DOCS_PATHS = {"/docs", "/openapi.json", "/redoc"}
 
 HEADER = "X-Site-Token"
 
+# Set on the gate's 401 so a client can tell "this instance is locked" apart
+# from "that password was wrong", which are otherwise the same status.
+GATE_HEADER = "X-Site-Gate"
+
 
 def password() -> str | None:
     value = os.environ.get("SITE_PASSWORD", "").strip()
