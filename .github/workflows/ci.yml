@@ -59,3 +59,12 @@ jobs:
       # in a server component typechecks and then fails here.
       - name: Build
         run: npm run build
+      # Focus, tab order and computed accessible names cannot be asserted
+      # without a browser, and the vitest suite deliberately has none. Chromium
+      # only, since these check the app's own markup rather than engine
+      # differences. Still offline: no API is started, and the site gate
+      # renders its children when it cannot reach one.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Accessibility tests
+        run: npx playwright test

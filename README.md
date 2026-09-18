@@ -514,6 +514,7 @@ src/notekit/
 web/src/
   components/     Reader, section rail, citations, quiz, ask-about, diagrams
   lib/            API client, profile, course status helpers, and their tests
+web/e2e/          Keyboard and screen-reader checks, in a real browser
 
 .github/workflows/ci.yml  Tests, typecheck, lint and build on every push
 scripts/dev.sh    Start the API reliably
@@ -812,11 +813,11 @@ is why Wikipedia is fetched alongside it.
 | 15. Deleting is reversible; library cards carry the teaching score; phone layout fixed | done |
 | 16. Accounts: register, sign in, sessions, and courses that follow the person | done |
 | 17. Password reset and an account page | done; mail delivery needs an SMTP host |
-| 18. Desktop layout and keyboard/screen-reader pass | done; verified by hand, not guarded by a test |
+| 18. Desktop layout and keyboard/screen-reader pass | done, with browser tests in CI |
 
-Beyond the milestones: 323 tests run in CI on every push, 265 on the Python
-logic layer and 58 on the web one, and every citation the export writes is
-verified to resolve to a real source passage.
+Beyond the milestones: 328 tests run in CI on every push, 265 on the Python
+logic layer, 58 on the web one and 5 driving a real browser, and every
+citation the export writes is verified to resolve to a real source passage.
 
 Some things are built but unmeasured, and are called out here rather than
 counted as finished. Whether the writing controls change the notes as
@@ -824,10 +825,12 @@ intended, whether asking sources for recent work improves a course, and what
 the teaching judge says about a typical course, are eval questions rather
 than build ones. The export's Obsidian-specific rendering (block-reference
 jumps, collapsed callouts) has not been confirmed inside Obsidian itself.
-The accessibility work is in the same position: the skip link, the landmark
-names and the contrast ratios were checked by hand in one browser, and no
-test in CI would notice if any of them regressed. It has also not been put
-in front of an actual screen reader, only the tree one would read.
+The accessibility work is partly covered: the skip link, the landmark names,
+the focus ring and the checkbox descriptions are asserted in a real browser
+on every push, and each of those assertions was checked against a
+reintroduction of the defect it exists for. The contrast ratios are not, and
+none of it has been put in front of an actual screen reader, only the tree
+one would read.
 
 Built with Python, FastAPI, Postgres/pgvector, the Anthropic API, LangGraph,
 Langfuse, sentence-transformers, Next.js, React and TypeScript.
