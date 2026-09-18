@@ -166,6 +166,15 @@ function applyCourseEvent(
         ),
       );
       break;
+    case "module_restart":
+      // The writer ran past its limit and is starting the section over;
+      // what has streamed so far is a dead draft.
+      setters.setModules((prev) =>
+        prev.map((m) =>
+          m.index === event.index ? { ...m, streamingText: "", status: "streaming" } : m,
+        ),
+      );
+      break;
     case "teaching":
       setters.setModules((prev) =>
         prev.map((m) =>
@@ -732,6 +741,7 @@ export function CourseWorkspace() {
               onStyleChange={setUseStyle}
               hasStyle={hasStyle}
               onSubmit={() => void start()}
+              onOpenCourse={(id) => void openCourse(id)}
             />
             )}
           </div>

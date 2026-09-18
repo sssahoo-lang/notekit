@@ -185,6 +185,7 @@ export type CourseEvent =
   | { type: "ingested"; cached: boolean; chunks: number }
   | { type: "module_start"; index: number; title: string }
   | { type: "teaching"; index: number; score: number | null; goals: TeachingSummary["goals"] }
+  | { type: "module_restart"; index: number; reason: string }
   | { type: "token"; index: number; text: string }
   | { type: "module"; index: number; notes: ModuleNotes }
   | { type: "module_error"; index: number; error: string }

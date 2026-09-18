@@ -316,6 +316,29 @@ async function* readSseStream(
   }
 }
 
+/** Own courses and indexed subjects matching the text so far. Instant. */
+export async function suggestInstant(
+  q: string,
+  user: string,
+): Promise<{ history: { id: number; label: string }[]; topics: { slug: string; label: string }[] }> {
+  const res = await request(
+    `/api/suggest?q=${encodeURIComponent(q)}&user=${encodeURIComponent(user)}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+/** Goals a learner typing this might mean. One small model call, cached. */
+export async function suggestRelated(q: string, user: string): Promise<string[]> {
+  const res = await request(
+    `/api/suggest/related?q=${encodeURIComponent(q)}&user=${encodeURIComponent(user)}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()).goals;
+}
+
 /** Plan an outline without writing anything. Cheap, so revising is free. */
 export async function planCourse(input: {
   goal: string;

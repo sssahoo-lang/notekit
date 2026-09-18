@@ -36,6 +36,7 @@ from . import (
     retrieval,
     sources,
     style,
+    suggest,
     upload,
 )
 from .identity import normalize
@@ -892,6 +893,19 @@ async def add_source_url(request: AddUrlRequest) -> dict:
         raise HTTPException(422, str(exc)) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Could not fetch that link: {exc}") from exc
+
+
+@app.get("/api/suggest")
+def suggest_instant(q: str, user: str = "anonymous") -> dict:
+    """Own courses and indexed subjects matching the text so far. No model call."""
+    return suggest.instant(q, user)
+
+
+@app.get("/api/suggest/related")
+def suggest_related(q: str, user: str = "anonymous") -> dict:
+    """Goals a learner typing this might mean. One small model call, cached."""
+    _throttle("suggest", user)
+    return {"goals": suggest.related(q)}
 
 
 @app.get("/api/search")

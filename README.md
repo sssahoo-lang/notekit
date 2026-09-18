@@ -69,6 +69,9 @@ produces the first of those numbers is itself in the repository, and the
   relevant.
 - **Exports to Markdown** as linked notes, one file per section with a page per
   source, readable in Obsidian or any editor.
+- **Suggests as you type.** Your own courses and subjects already gathered
+  appear at once; a few related goals at different levels follow after a
+  pause, from one small model call.
 - **Shows you the outline first.** Planning costs a fraction of a cent, so the
   syllabus is shown for renaming, reordering and editing before any section is
   written. Most "not what I asked for" outcomes are decided there.
@@ -730,6 +733,7 @@ is why Wikipedia is fetched alongside it.
 | 11. Outline review before writing | done |
 | 12. Teaching judge, alongside faithfulness and coverage | done, in the eval lane and the course map |
 | 13. Sources shown and editable at review: strike a document, add a link | done |
+| 14. Goal suggestions while typing; a section that overruns its length is retried once | done |
 
 Beyond the milestones: 264 tests run in CI on every push, 208 on the Python
 logic layer and 56 on the web one, and every citation the export writes is

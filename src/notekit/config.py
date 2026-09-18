@@ -69,6 +69,7 @@ RATE_LIMITS = {
     "course": (10, 3600),
     "plan": (30, 3600),
     "sources": (30, 3600),
+    "suggest": (120, 3600),
     "explain": (60, 3600),
     "upload": (20, 3600),
 }

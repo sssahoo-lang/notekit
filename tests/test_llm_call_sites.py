@@ -179,3 +179,54 @@ def test_a_failing_quiz_does_not_discard_the_notes(monkeypatch):
     assert notes["body"].strip(), "the written prose must survive a quiz failure"
     assert notes["quiz"] is None, "and the quiz is simply absent"
     assert not notes["refused"], "a quiz failure is not a refusal"
+
+
+def test_a_section_that_runs_past_the_cap_is_retried_once_more_concisely(monkeypatch):
+    """A first attempt that hits max_tokens is retracted and retried with a
+    length instruction, rather than stored as a fragment or lost."""
+    from notekit import pipeline
+    from notekit.models import Chunk, Module
+
+    prompts: list[str] = []
+
+    async def stream(**kw):
+        prompts.append(kw["prompt"])
+        if len(prompts) == 1:
+            yield "A long start that will be cut [c1]. "
+            raise RuntimeError("Generation stopped early (max_tokens) after 8000 tokens; the text is incomplete.")
+        yield "Short and complete [c1]."
+
+    monkeypatch.setattr(pipeline.llm, "astream_complete", stream)
+    monkeypatch.setattr(pipeline.retrieval, "retrieve_multi", lambda *a, **k: [
+        Chunk(id=1, citation_key="c1", text="t", document_title="D", document_url=None, score=9.0)])
+
+    async def collect():
+        return [e async for e in pipeline.astream_module_notes(
+            Module(title="M", query="q", learning_goals=["g"]), namespace="ns", with_quiz=False)]
+
+    events = asyncio.run(collect())
+    kinds = [e["type"] for e in events]
+    assert "module_restart" in kinds, "the reader is told the draft is being retracted"
+    assert kinds.index("module_restart") < kinds.index("module")
+    assert events[-1]["notes"]["body"] == "Short and complete [c1]."
+    assert len(prompts) == 2 and "1,500 words" in prompts[1] and "1,500 words" not in prompts[0]
+
+
+def test_a_second_overrun_is_not_retried_again(monkeypatch):
+    from notekit import pipeline
+    from notekit.models import Chunk, Module
+
+    async def stream(**kw):
+        yield "x [c1]"
+        raise RuntimeError("Generation stopped early (max_tokens) after 8000 tokens; the text is incomplete.")
+
+    monkeypatch.setattr(pipeline.llm, "astream_complete", stream)
+    monkeypatch.setattr(pipeline.retrieval, "retrieve_multi", lambda *a, **k: [
+        Chunk(id=1, citation_key="c1", text="t", document_title="D", document_url=None, score=9.0)])
+
+    async def collect():
+        return [e async for e in pipeline.astream_module_notes(
+            Module(title="M", query="q", learning_goals=["g"]), namespace="ns", with_quiz=False)]
+
+    with pytest.raises(RuntimeError, match="max_tokens"):
+        asyncio.run(collect())

@@ -422,34 +422,54 @@ async def astream_module_notes(
     prefs_instruction = f"\n\n{prefs.as_instruction()}" if prefs else ""
 
     body = ""
-    holding = True
-    suppressed = False
-
-    async for delta in llm.astream_complete(
-        model=config.GENERATION_MODEL,
-        system=_GROUNDING_SYSTEM,
-        cached_prefix=passages,
-        prompt=(
-            f"Module: {module.title}\n\n"
-            f"The reader should come away able to:\n{goals}\n\n"
-            f"{_NOTES_TASK}{style_instruction}{prefs_instruction}"
-        ),
-        max_tokens=config.MAX_TOKENS_NOTES,
-        purpose="write-notes",
-    ):
-        body += delta
-        if holding:
-            # A refusal announces itself only in the first word. Hold the
-            # opening back until there is enough text to tell; emitting first
-            # and retracting would flash discarded prose at the reader.
-            if len(body) < len(_REFUSAL_MARKER):
+    # Two attempts. The writer occasionally runs far past the length the task
+    # asks for and hits the token cap; that used to be stored as a fragment,
+    # then raised as a lost section. The second attempt says so and asks for
+    # a bounded length. Text already streamed to the reader is retracted with
+    # a restart event first, so the retry does not append to a dead draft.
+    for attempt in range(2):
+        body = ""
+        holding = True
+        suppressed = False
+        concise = (
+            "\n\nThe previous attempt ran past the length limit and was discarded. "
+            "Keep this section under 1,500 words: teach each goal, then stop."
+            if attempt
+            else ""
+        )
+        try:
+            async for delta in llm.astream_complete(
+                model=config.GENERATION_MODEL,
+                system=_GROUNDING_SYSTEM,
+                cached_prefix=passages,
+                prompt=(
+                    f"Module: {module.title}\n\n"
+                    f"The reader should come away able to:\n{goals}\n\n"
+                    f"{_NOTES_TASK}{style_instruction}{prefs_instruction}{concise}"
+                ),
+                max_tokens=config.MAX_TOKENS_NOTES,
+                purpose="write-notes",
+            ):
+                body += delta
+                if holding:
+                    # A refusal announces itself only in the first word. Hold
+                    # the opening back until there is enough text to tell;
+                    # emitting first and retracting would flash discarded
+                    # prose at the reader.
+                    if len(body) < len(_REFUSAL_MARKER):
+                        continue
+                    holding = False
+                    suppressed = body.startswith(_REFUSAL_MARKER)
+                    if not suppressed:
+                        yield {"type": "token", "text": body}
+                elif not suppressed:
+                    yield {"type": "token", "text": delta}
+        except RuntimeError as exc:
+            if "max_tokens" in str(exc) and attempt == 0:
+                yield {"type": "module_restart", "reason": "ran past the length limit"}
                 continue
-            holding = False
-            suppressed = body.startswith(_REFUSAL_MARKER)
-            if not suppressed:
-                yield {"type": "token", "text": body}
-        elif not suppressed:
-            yield {"type": "token", "text": delta}
+            raise
+        break
 
     if body.strip().startswith(_REFUSAL_MARKER):
         reason = body.strip().removeprefix(_REFUSAL_MARKER).strip()

@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { GoalSuggestions } from "@/components/goal-suggestions";
 import type { NamespaceInfo, NotePreferences } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +108,7 @@ type Props = {
   prefs: NotePreferences;
   onPrefsChange: (value: NotePreferences) => void;
   onSubmit: () => void;
+  onOpenCourse: (id: number) => void;
 };
 
 export function CourseForm({
@@ -125,6 +127,7 @@ export function CourseForm({
   prefs,
   onPrefsChange,
   onSubmit,
+  onOpenCourse,
 }: Props) {
   const usingOwnFiles = sourceMode !== autoSourceValue;
 
@@ -167,14 +170,28 @@ export function CourseForm({
           onChange={(e) => onGoalChange(e.target.value)}
           rows={3}
           className="mt-3 resize-y text-base leading-relaxed"
-          placeholder="Teach me…"
+          placeholder="A subject, a question, or a goal. Suggestions appear as you type."
           aria-describedby="goal-help"
+          onKeyDown={(e) => {
+            // The one shortcut everyone tries in a text box that builds things.
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && goal.trim()) {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
+        />
+
+        <GoalSuggestions
+          query={goal}
+          userId={userId}
+          onPick={onGoalChange}
+          onOpenCourse={onOpenCourse}
         />
 
         <p id="goal-help" className="mt-2 text-sm text-muted-foreground">
-          Say what level you want: &ldquo;from scratch&rdquo;,
-          &ldquo;intermediate&rdquo;, &ldquo;I already know the basics&rdquo;. It
-          changes how the notes are written.
+          You will see the outline and the sources before anything is written.
+          Level and length are under &ldquo;How it is written&rdquo; below, or
+          just say them here.
         </p>
 
         {!goal.trim() ? (
