@@ -74,6 +74,10 @@ produces the first of those numbers is itself in the repository, and the
   signing up move across. Using it without an account still works.
 - **Undoes a delete.** Removing a course marks the row and offers it back in
   the toast; a purge clears it a week later.
+- **Works from the keyboard.** A skip link past the library and into the
+  notes, focus that stays visible as you tab, landmarks a screen reader can
+  name, and form hints attached as descriptions rather than folded into the
+  control's own name.
 - **Suggests as you type.** Your own courses and subjects already gathered
   appear at once; a few related goals at different levels follow after a
   pause, from one small model call.
@@ -808,7 +812,7 @@ is why Wikipedia is fetched alongside it.
 | 15. Deleting is reversible; library cards carry the teaching score; phone layout fixed | done |
 | 16. Accounts: register, sign in, sessions, and courses that follow the person | done |
 | 17. Password reset and an account page | done; mail delivery needs an SMTP host |
-| 18. Desktop layout and keyboard/screen-reader pass | done |
+| 18. Desktop layout and keyboard/screen-reader pass | done; verified by hand, not guarded by a test |
 
 Beyond the milestones: 323 tests run in CI on every push, 265 on the Python
 logic layer and 58 on the web one, and every citation the export writes is
@@ -820,6 +824,10 @@ intended, whether asking sources for recent work improves a course, and what
 the teaching judge says about a typical course, are eval questions rather
 than build ones. The export's Obsidian-specific rendering (block-reference
 jumps, collapsed callouts) has not been confirmed inside Obsidian itself.
+The accessibility work is in the same position: the skip link, the landmark
+names and the contrast ratios were checked by hand in one browser, and no
+test in CI would notice if any of them regressed. It has also not been put
+in front of an actual screen reader, only the tree one would read.
 
 Built with Python, FastAPI, Postgres/pgvector, the Anthropic API, LangGraph,
 Langfuse, sentence-transformers, Next.js, React and TypeScript.
