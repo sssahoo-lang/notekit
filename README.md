@@ -25,7 +25,7 @@ deliberately out-of-scope questions are correctly refused.** The judge that
 produces the first of those numbers is itself in the repository, and the
 [Results](#results) section says what it varies by.
 
-[![NoteKit: the library with courses in progress, related ideas and writing controls before anything is generated, asking about a highlighted passage with practice questions after, adding your own material, learning a writing style, and signing in](docs/screenshots.png)](docs/screenshots.png)
+[![NoteKit: the library with courses in progress, related ideas and writing controls before anything is generated, asking about a highlighted passage with practice questions after, adding your own material, learning a writing style, and signing in](docs/interface.png)](docs/interface.png)
 
 ### Contents
 
