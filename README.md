@@ -710,10 +710,14 @@ decides who the caller is, over anything the client claims to be.
 
 Using the app without an account still works, and that path is still the old
 one: a reader id minted by the browser, taken on trust, which is isolation
-between browsers rather than access control between people. What is missing
-from the account path is everything around the edges: no email verification,
-no password reset, no second factor. A forgotten password currently means a
-lost library.
+between browsers rather than access control between people.
+
+Resetting a password works: single-use tokens stored as digests, an hour to
+use them, every session ended when one is spent, and a reply that is the same
+whether or not the address has an account. Delivery is the gap. No mail
+provider is configured, so the link is written to the server log unless
+`SMTP_HOST` is set; setting it is the only thing between this and delivered
+mail. Still missing: email verification, and any second factor.
 
 **Other gaps.** Scanned PDFs are rejected rather than OCR'd. Topic
 canonicalisation relies on the planner emitting a consistent slug, so close
@@ -744,6 +748,7 @@ is why Wikipedia is fetched alongside it.
 | 14. Goal suggestions while typing; a section that overruns its length is retried once | done |
 | 15. Deleting is reversible; library cards carry the teaching score; phone layout fixed | done |
 | 16. Accounts: register, sign in, sessions, and courses that follow the person | done |
+| 17. Password reset and an account page | done; mail delivery needs an SMTP host |
 
 Beyond the milestones: 264 tests run in CI on every push, 208 on the Python
 logic layer and 56 on the web one, and every citation the export writes is

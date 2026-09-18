@@ -72,6 +72,9 @@ RATE_LIMITS = {
     "suggest": (120, 3600),
     # Sign-in is the one endpoint worth guessing at, so it is the tightest.
     "login": (10, 900),
+    # Tighter still: this one sends mail, so it is a way to use the server to
+    # pester somebody else's inbox.
+    "reset": (5, 3600),
     "explain": (60, 3600),
     "upload": (20, 3600),
 }

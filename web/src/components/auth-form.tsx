@@ -157,6 +157,17 @@ export function AuthForm({ mode }: { mode: Mode }) {
         </p>
       ) : null}
 
+      {mode === "signin" ? (
+        <p className="mt-4 text-sm">
+          <Link
+            href="/forgot"
+            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Forgotten your password?
+          </Link>
+        </p>
+      ) : null}
+
       <p className="mt-8 border-t border-border/70 pt-5 text-sm text-muted-foreground">
         {copy.swapText}{" "}
         <Link

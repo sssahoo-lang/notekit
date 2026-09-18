@@ -388,6 +388,43 @@ export async function setAccountName(display_name: string): Promise<void> {
   if (!res.ok) throw new Error(await readError(res));
 }
 
+/** Start a reset. The reply is the same whether or not the address exists. */
+export async function requestPasswordReset(email: string): Promise<string> {
+  const res = await request(`/api/password/forgot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()).detail as string;
+}
+
+/** Spend a reset link. Every session for that account ends. */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const res = await request(`/api/password/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+/** Change a password from inside the account. Signs out everywhere. */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const res = await request(`/api/me/password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
 /** Own courses and indexed subjects matching the text so far. Instant. */
 export async function suggestInstant(
   q: string,

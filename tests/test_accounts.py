@@ -192,3 +192,72 @@ class TestGateAndSignInAreDifferent401s:
         r = client.post("/api/login", json={"email": "a@b.co", "password": "nope-nope-nope"})
         assert r.status_code == 401
         assert api.auth.GATE_HEADER not in r.headers
+
+
+class TestPasswordReset:
+    """A reset link is a way into an account sitting in an inbox, so the rules
+    around it matter more than the flow: it works once, it expires, asking for
+    one reveals nothing about who has an account, and spending it ends every
+    session that existed before."""
+
+    @pytest.fixture
+    def client(self, monkeypatch):
+        api._rate_windows.clear()
+        monkeypatch.delenv("SITE_PASSWORD", raising=False)
+        return TestClient(api.app)
+
+    def test_asking_says_the_same_thing_for_an_unknown_address(self, client, monkeypatch):
+        sent = []
+        monkeypatch.setattr(api.mail, "send", lambda *a, **k: sent.append(a) or True)
+        monkeypatch.setattr(api.accounts, "begin_reset", lambda e: None)
+        unknown = client.post("/api/password/forgot", json={"email": "nobody@example.com"})
+
+        api._rate_windows.clear()
+        monkeypatch.setattr(api.accounts, "begin_reset", lambda e: ("tok", e))
+        known = client.post("/api/password/forgot", json={"email": "real@example.com"})
+
+        assert unknown.status_code == known.status_code == 200
+        assert unknown.json() == known.json(), "the reply must not reveal which it was"
+        assert len(sent) == 1, "but mail only goes to the address that exists"
+
+    def test_the_emailed_link_points_at_the_app_and_carries_the_token(
+        self, client, monkeypatch
+    ):
+        sent = {}
+        monkeypatch.setattr(
+            api.mail, "send",
+            lambda to, subject, body: sent.update(to=to, body=body) or True,
+        )
+        monkeypatch.setattr(api.accounts, "begin_reset", lambda e: ("tok-abc", e))
+        client.post("/api/password/forgot", json={"email": "real@example.com"})
+        assert "/reset?token=tok-abc" in sent["body"]
+        assert sent["to"] == "real@example.com"
+
+    def test_asking_is_rate_limited_so_it_cannot_pester_an_inbox(self, client, monkeypatch):
+        monkeypatch.setattr(api.accounts, "begin_reset", lambda e: None)
+        monkeypatch.setattr(api.config, "RATE_LIMITS", {**api.config.RATE_LIMITS, "reset": (2, 3600)})
+        body = {"email": "someone@example.com"}
+        codes = [client.post("/api/password/forgot", json=body).status_code for _ in range(3)]
+        assert codes == [200, 200, 429]
+
+    def test_a_spent_or_unknown_token_is_refused_in_the_same_words(self, client, monkeypatch):
+        monkeypatch.setattr(api.accounts, "complete_reset", lambda t, p: False)
+        r = client.post("/api/password/reset", json={"token": "nope", "new_password": "x" * 12})
+        assert r.status_code == 422
+        assert "expired or been used" in r.json()["detail"]
+
+    def test_a_short_new_password_is_refused(self, client, monkeypatch):
+        def refuse(token, password):
+            raise api.accounts.AccountError("Use at least 10 characters.")
+
+        monkeypatch.setattr(api.accounts, "complete_reset", refuse)
+        r = client.post("/api/password/reset", json={"token": "t", "new_password": "short"})
+        assert r.status_code == 422
+
+    def test_mail_without_smtp_reports_failure_rather_than_pretending(self, monkeypatch):
+        monkeypatch.delenv("SMTP_HOST", raising=False)
+        monkeypatch.delenv("MAIL_FALLBACK_LOG", raising=False)
+        from notekit import mail
+
+        assert mail.configured() is False
+        assert mail.send("a@b.co", "s", "body") is False

@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from . import (
     accounts,
+    mail,
     auth,
     calibration,
     config,
@@ -147,6 +148,17 @@ async def site_password_gate(request, call_next):
 # course was reachable by anyone who could count.
 
 _rate_windows: dict[tuple[str, str], list[float]] = {}
+
+
+def _app_origin() -> str:
+    """Where the web app lives, for links sent by mail.
+
+    The API and the app are different origins, and a reset link has to point
+    at the app. ALLOWED_ORIGINS already names it.
+    """
+    return os.environ.get("APP_ORIGIN", "").strip() or (
+        _origins[0] if _origins else "http://localhost:3000"
+    )
 
 
 def _signed_in(request: Request) -> dict | None:
@@ -321,6 +333,15 @@ class DisplayNameRequest(BaseModel):
 
 class PasswordChangeRequest(BaseModel):
     current_password: str
+    new_password: str
+
+
+class ForgotRequest(BaseModel):
+    email: str
+
+
+class ResetRequest(BaseModel):
+    token: str
     new_password: str
 
 
@@ -1092,6 +1113,50 @@ def change_password(body: PasswordChangeRequest, request: Request) -> dict:
         raise HTTPException(422, str(exc)) from exc
     # Every session was dropped, including this one.
     return {"changed": True, "signed_out_everywhere": True}
+
+
+@app.post("/api/password/forgot")
+def forgot_password(body: ForgotRequest) -> dict:
+    """Start a reset. Answers the same way whether or not the address exists.
+
+    Anything else turns this into a way to ask which addresses have accounts.
+    """
+    _throttle("reset", body.email.strip().lower() or "anonymous")
+    issued = accounts.begin_reset(body.email)
+    if issued:
+        token, address = issued
+        link = f"{_app_origin()}/reset?token={token}"
+        mail.send(
+            address,
+            "Reset your NoteKit password",
+            "Someone asked to reset the NoteKit password for this address.\n\n"
+            f"{link}\n\n"
+            f"The link works once and expires in {accounts.RESET_MINUTES} minutes. "
+            "If this was not you, nothing has changed and you can ignore this.",
+        )
+    return {
+        "sent": True,
+        "detail": (
+            "If that address has an account, a reset link is on its way. "
+            "The link expires in an hour."
+        ),
+    }
+
+
+@app.post("/api/password/reset")
+def reset_password(body: ResetRequest) -> dict:
+    """Spend a reset link. Every session for that account ends."""
+    _throttle("reset", "reset-token")
+    try:
+        ok = accounts.complete_reset(body.token, body.new_password)
+    except accounts.AccountError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not ok:
+        raise HTTPException(
+            422,
+            "That link has expired or been used already. Ask for a new one.",
+        )
+    return {"reset": True}
 
 
 @app.get("/api/search")

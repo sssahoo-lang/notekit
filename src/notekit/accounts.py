@@ -52,6 +52,9 @@ _SCRYPT_MAXMEM = 128 * _SCRYPT_R * _SCRYPT_N * 2
 SESSION_COOKIE = "notekit_session"
 SESSION_DAYS = 30
 
+# Short, because a reset link is a way into an account sitting in an inbox.
+RESET_MINUTES = 60
+
 # Deliberately loose. Address validation by regular expression is a well known
 # way to reject real addresses; the only proof that an address works is mail
 # sent to it, which this does not do.
@@ -88,6 +91,17 @@ def ensure_tables(conn: psycopg.Connection) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_resets (
+            token_hash TEXT PRIMARY KEY,
+            user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            expires_at TIMESTAMPTZ NOT NULL,
+            used_at    TIMESTAMPTZ
+        )
+        """
     )
 
 
@@ -272,6 +286,68 @@ def session_user(token: str | None) -> dict | None:
         "email": row["email"],
         "display_name": row["display_name"],
     }
+
+
+def begin_reset(email: str) -> tuple[str, str] | None:
+    """Mint a reset token for an address, or None if nobody has that address.
+
+    The caller must answer the same way either way. Returning None here rather
+    than raising is what lets the endpoint stay silent about who has an
+    account, while still doing nothing for an address that has none.
+    """
+    value = (email or "").strip().lower()
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(minutes=RESET_MINUTES)
+    with db.connect() as conn:
+        ensure_tables(conn)
+        row = conn.execute(
+            "SELECT id, email FROM users WHERE email = %s", (value,)
+        ).fetchone()
+        if row is None:
+            return None
+        # Older links for this account stop working, so a reset request always
+        # leaves exactly one way in.
+        conn.execute(
+            "DELETE FROM password_resets WHERE user_id = %s OR expires_at < now()",
+            (row["id"],),
+        )
+        conn.execute(
+            "INSERT INTO password_resets (token_hash, user_id, expires_at) "
+            "VALUES (%s, %s, %s)",
+            (_digest(token), row["id"], expires),
+        )
+        conn.commit()
+    return token, row["email"]
+
+
+def complete_reset(token: str, new_password: str) -> bool:
+    """Spend a reset token. False if it is unknown, expired or already used."""
+    if len(new_password or "") < MIN_PASSWORD:
+        raise AccountError(f"Use at least {MIN_PASSWORD} characters.")
+    with db.connect() as conn:
+        ensure_tables(conn)
+        row = conn.execute(
+            """
+            SELECT user_id FROM password_resets
+            WHERE token_hash = %s AND used_at IS NULL AND expires_at > now()
+            """,
+            (_digest(token or ""),),
+        ).fetchone()
+        if row is None:
+            return False
+        conn.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (hash_password(new_password), row["user_id"]),
+        )
+        conn.execute(
+            "UPDATE password_resets SET used_at = now() WHERE token_hash = %s",
+            (_digest(token),),
+        )
+        # Whoever was signed in before is signed out: a reset is what someone
+        # does when they think another person has the old password.
+        conn.execute("DELETE FROM sessions WHERE user_id = %s", (row["user_id"],))
+        conn.commit()
+    return True
 
 
 def end_session(token: str | None) -> None:

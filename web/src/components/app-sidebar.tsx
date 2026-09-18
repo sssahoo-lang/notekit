@@ -219,6 +219,12 @@ export function AppSidebar() {
                 </Button>
               </div>
             ) : null}
+            <Link
+              href="/account"
+              className="block rounded-md px-2 py-1.5 text-sm text-foreground/70 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              Account
+            </Link>
             <button
               type="button"
               onClick={() => void leave()}
