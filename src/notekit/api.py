@@ -90,6 +90,9 @@ async def lifespan(_app: FastAPI):
         conn.commit()
     # In-memory generation jobs die with the process; don't leave History saying
     # "Generating" for courses that can no longer be writing.
+    purged = courses.purge_deleted()
+    if purged:
+        print(f"purged {purged} course(s) deleted more than a week ago")
     abandoned = courses.abandon_stale_generating()
     if abandoned:
         print(f"Reconciled {abandoned} abandoned generating course(s) → partial")
@@ -815,6 +818,14 @@ def explain_selection(request: ExplainRequest) -> dict:
 
     _, cost = llm.usage_report()
     return {"answer": answer, "estimated_cost_usd": round(cost, 4)}
+
+
+@app.post("/api/courses/{course_id}/restore")
+def restore_course(course_id: int, user: str) -> dict:
+    """Undo a delete, while the row is still there to undo."""
+    if not courses.restore(course_id, user_id=user):
+        raise HTTPException(404, f"course {course_id} cannot be restored")
+    return {"restored": course_id}
 
 
 @app.delete("/api/courses/{course_id}")

@@ -69,6 +69,13 @@ def ensure_table(conn) -> None:
     conn.execute(
         "ALTER TABLE courses ADD COLUMN IF NOT EXISTS excluded_documents JSONB"
     )
+    # Deleting is reversible for a while. A course costs real money and half a
+    # minute of waiting, and the delete control sits one click from the title
+    # with no dialogue in the way, so the row is marked rather than removed and
+    # a purge clears it later.
+    conn.execute(
+        "ALTER TABLE courses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ"
+    )
     conn.execute(
         """
         CREATE INDEX IF NOT EXISTS courses_user_created_idx
@@ -307,9 +314,14 @@ def list_for_user(user_id: str, *, limit: int = 50) -> list[dict]:
                      WHERE COALESCE((m->'notes'->>'refused')::boolean, false) = false
                        AND COALESCE(m->>'error', '') = ''
                        AND length(trim(COALESCE(m->'notes'->>'body', ''))) > 0
-                   ) AS usable_count
+                   ) AS usable_count,
+                   (
+                     SELECT avg((m->'teaching'->>'score')::float)
+                     FROM jsonb_array_elements(modules) AS m
+                     WHERE m->'teaching'->>'score' IS NOT NULL
+                   ) AS teaching
             FROM courses
-            WHERE user_id = %s
+            WHERE user_id = %s AND deleted_at IS NULL
             ORDER BY COALESCE(opened_at, created_at) DESC
             LIMIT %s
             """,
@@ -375,7 +387,7 @@ def get(course_id: int) -> dict | None:
                    created_at, progress, opened_at, word_count, generation_status,
                    syllabus, preferences, excluded_documents
             FROM courses
-            WHERE id = %s
+            WHERE id = %s AND deleted_at IS NULL
             """,
             (course_id,),
         ).fetchone()
@@ -406,15 +418,23 @@ def spent_today(user_id: str) -> float:
 
 
 def delete(course_id: int, *, user_id: str | None = None) -> bool:
+    """Mark a course deleted. `restore` undoes it until `purge_deleted` runs.
+
+    One statement rather than a branch per caller. When this was two branches,
+    only the unscoped one was converted to a soft delete and the owner-scoped
+    one, which is the branch the API actually uses, went on destroying rows.
+    """
+    owner = normalize(user_id) if user_id is not None else None
     with db.connect() as conn:
         ensure_table(conn)
-        if user_id is None:
-            cur = conn.execute("DELETE FROM courses WHERE id = %s", (course_id,))
-        else:
-            cur = conn.execute(
-                "DELETE FROM courses WHERE id = %s AND user_id = %s",
-                (course_id, normalize(user_id)),
-            )
+        cur = conn.execute(
+            """
+            UPDATE courses SET deleted_at = now()
+            WHERE id = %s AND deleted_at IS NULL
+              AND (%s::text IS NULL OR user_id = %s)
+            """,
+            (course_id, owner, owner),
+        )
         conn.commit()
         return cur.rowcount > 0
 
@@ -469,6 +489,37 @@ def _valid_status(status: str) -> str:
     return status
 
 
+def restore(course_id: int, *, user_id: str) -> bool:
+    """Undo a delete. Only the owner, and only while the row survives."""
+    with db.connect() as conn:
+        ensure_table(conn)
+        cur = conn.execute(
+            "UPDATE courses SET deleted_at = NULL "
+            "WHERE id = %s AND user_id = %s AND deleted_at IS NOT NULL",
+            (course_id, normalize(user_id)),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def purge_deleted(*, older_than_days: int = 7) -> int:
+    """Remove rows deleted long enough ago that undo is no longer offered.
+
+    Called at startup rather than on a timer: a single instance restarts often
+    enough, and a course kept a few days too long costs a row.
+    """
+    with db.connect() as conn:
+        ensure_table(conn)
+        cur = conn.execute(
+            "DELETE FROM courses "
+            "WHERE deleted_at IS NOT NULL "
+            "AND deleted_at < now() - make_interval(days => %s)",
+            (older_than_days,),
+        )
+        conn.commit()
+        return cur.rowcount
+
+
 def _summary_row(row: dict) -> dict:
     titles = _parse_json(row["module_titles"]) or []
     planned = int(row.get("planned_count") or len(titles) or 0)
@@ -484,6 +535,9 @@ def _summary_row(row: dict) -> dict:
         "module_count": row["module_count"],
         "planned_count": planned,
         "usable_count": int(row.get("usable_count") or 0),
+        "teaching": (
+            float(row["teaching"]) if row.get("teaching") is not None else None
+        ),
         "estimated_cost_usd": row["estimated_cost_usd"],
         "with_quiz": row["with_quiz"],
         "used_style": row["used_style"],

@@ -92,7 +92,11 @@ export function ExcalidrawDiagram({ definition, className }: Props) {
   return (
     <div
       className={cn(
-        "h-72 overflow-hidden rounded-xl border border-border/70 bg-[#fafaf9] shadow-[inset_0_1px_0_oklch(0.95_0.01_95)] sm:h-80",
+        // Excalidraw draws into a position:fixed layer sized to the viewport,
+        // which escapes overflow-hidden and pushed the page 17px wide on a
+        // phone. `contain: paint` makes this element a containing block for
+        // fixed descendants, so the layer is clipped to the figure.
+        "h-72 overflow-hidden rounded-xl border border-border/70 bg-[#fafaf9] shadow-[inset_0_1px_0_oklch(0.95_0.01_95)] [contain:paint] sm:h-80",
         className,
       )}
     >

@@ -26,9 +26,11 @@ import {
   addSourceUrl,
   gatherSources,
   planCourse,
+  restoreCourse,
   streamCourse,
 } from "@/lib/api";
 import {
+  courseLabel,
   generationStatus,
   pickContinueCourse,
 } from "@/lib/course-status";
@@ -315,6 +317,13 @@ export function CourseWorkspace() {
       if (cancelled) return;
       const p = getProfile();
       setProfile(p);
+      // Arriving from Materials with a namespace: preselect it, so "build a
+      // course from this" lands on a form that is already pointed at it.
+      const material = new URLSearchParams(window.location.search).get("material");
+      if (material) {
+        setSourceMode(material);
+        setUploadNs(material);
+      }
       void refreshLibrary(p);
       getNamespaces(p.id)
         .then((rows) => {
@@ -473,11 +482,29 @@ export function CourseWorkspace() {
   }
 
   async function removeCourse(id: number) {
+    // Deleting is one click next to the title, and a course costs real money
+    // and half a minute of waiting. Rather than a dialogue in the way of the
+    // common case, the row is marked deleted and the toast offers it back.
+    const label = courseLabel(library.find((c) => c.id === id) ?? { goal: "Course" });
     try {
       await deleteCourse(id, userId);
       if (id === activeCourseId) resetView();
       if (profile) void refreshLibrary(profile);
-      toast.success("Course deleted");
+      toast.success(`Deleted “${label}”`, {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void restoreCourse(id, userId)
+              .then(() => {
+                if (profile) void refreshLibrary(profile);
+                toast.success("Restored");
+              })
+              .catch((err) =>
+                toast.error(err instanceof Error ? err.message : String(err)),
+              );
+          },
+        },
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }

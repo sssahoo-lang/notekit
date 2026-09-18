@@ -17,6 +17,9 @@ export function UploadWorkspace() {
   const [files, setFiles] = useState<FileList | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  // The namespace just indexed, so the page can offer the next step rather
+  // than describing it.
+  const [ready, setReady] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +42,7 @@ export function UploadWorkspace() {
 
     setBusy(true);
     setResult(null);
+    setReady(null);
     setSkipped([]);
     setError(null);
     try {
@@ -53,6 +57,7 @@ export function UploadWorkspace() {
         ? (summary.skipped as string[])
         : [];
       setSkipped(skippedList);
+      setReady((summary.namespace as string) ?? null);
       setResult(
         `Added ${docs} file${docs === 1 ? "" : "s"} to your material. ` +
           `${chunks} passages your notes can be written from.`,
@@ -151,6 +156,13 @@ export function UploadWorkspace() {
           className="mt-8 rounded-xl border border-teal-800/25 bg-teal-50 px-4 py-3 dark:border-teal-300/25 dark:bg-teal-300/10"
         >
           <p className="text-sm text-teal-950 dark:text-teal-100">{result}</p>
+          {ready ? (
+            <Button asChild size="sm" className="mt-3">
+              <Link href={`/?material=${encodeURIComponent(ready)}`}>
+                Build a course from this
+              </Link>
+            </Button>
+          ) : null}
           {skipped.length ? (
             <details className="mt-2">
               <summary className="cursor-pointer text-sm text-teal-900 dark:text-teal-200">

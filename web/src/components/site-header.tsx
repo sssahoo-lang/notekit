@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,25 @@ export function SiteHeader() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const barRef = useRef<HTMLElement>(null);
+
+  // The header is one row on a wide screen and two on a phone, and the exact
+  // height depends on the font. Anything sticking to its underside needs that
+  // number, so it is measured and published rather than repeated as a guess:
+  // a hardcoded offset left the section bar tucked under the header.
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty(
+        "--site-header-h",
+        `${el.getBoundingClientRect().height}px`,
+      );
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     // See upload-workspace.tsx: getProfile() must run post-hydration, not in
@@ -46,7 +65,10 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-md lg:hidden">
+    <header
+      ref={barRef}
+      className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-md lg:hidden"
+    >
       <a
         href="#main"
         className="sr-only rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
@@ -54,7 +76,12 @@ export function SiteHeader() {
         Skip to content
       </a>
 
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
+      {/* Wraps rather than overflows. At 375px the row of links, the name
+          control and the theme toggle came to about 419px and pushed the
+          toggle off the right edge, which on a phone reads as a broken page.
+          The sidebar that carries these on desktop is hidden here, so nothing
+          can simply be dropped; a second row costs less than a lost control. */}
+      <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-1.5 sm:gap-x-4 sm:px-6 sm:py-0">
         <Link
           href="/"
           className="font-heading text-lg tracking-tight text-ink transition-colors hover:text-primary"
@@ -62,7 +89,12 @@ export function SiteHeader() {
           NoteKit
         </Link>
 
-        <nav aria-label="Main" className="flex min-w-0 items-center gap-0.5">
+        {/* Its own row below sm. Sharing one row with the logo meant the nav
+            squeezed rather than wrapped, and overlapped it. */}
+        <nav
+          aria-label="Main"
+          className="flex w-full min-w-0 items-center justify-end gap-0.5 sm:w-auto"
+        >
           {LINKS.map((link) => {
             const active =
               link.href === "/"
@@ -74,7 +106,7 @@ export function SiteHeader() {
                 href={link.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                  "rounded-md px-2 py-1.5 text-sm transition-colors sm:px-2.5",
                   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                   active
                     ? "bg-primary/10 font-medium text-primary"

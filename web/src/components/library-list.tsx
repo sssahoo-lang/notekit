@@ -65,6 +65,7 @@ export function LibraryList({
           const planned = plannedCount(course);
           const ready = course.usable_count ?? 0;
 
+          const taught = course.teaching;
           const mins = readingMinutes(course.word_count);
           let detail = relativeWhen(course.opened_at || course.created_at);
           if (mins) detail = `${mins} min read · ${detail}`;
@@ -107,6 +108,25 @@ export function LibraryList({
                     {detail}
                     {course.used_style ? " · your writing style" : ""}
                   </p>
+                  {taught != null ? (
+                    <p className="mt-2 flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="h-1 w-16 overflow-hidden rounded-full bg-border"
+                      >
+                        <span
+                          className={cn(
+                            "block h-full rounded-full",
+                            taught >= 2 / 3 ? "bg-primary/70" : "bg-amber-500/70",
+                          )}
+                          style={{ width: `${Math.round(taught * 100)}%` }}
+                        />
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        taught {Math.round(taught * 100)}% of its goals
+                      </span>
+                    </p>
+                  ) : null}
                 </button>
 
                 <Button
@@ -114,7 +134,15 @@ export function LibraryList({
                   size="sm"
                   variant="ghost"
                   aria-label={`Delete course: ${courseLabel(course)}`}
-                  className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-destructive"
+                  // Hidden until hover only where hovering exists. On a phone
+                  // there is no hover, so the control was invisible and the
+                  // only way to delete was to tap where it should have been.
+                  className={cn(
+                    "text-muted-foreground transition-opacity hover:text-destructive",
+                    "focus-visible:opacity-100",
+                    "[@media(hover:hover)]:opacity-0",
+                    "[@media(hover:hover)]:group-hover:opacity-100",
+                  )}
                   onClick={() => onDelete(course.id)}
                 >
                   Delete

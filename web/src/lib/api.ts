@@ -193,6 +193,15 @@ export async function deleteCourse(id: number, user: string): Promise<void> {
   if (!res.ok) throw new Error(await readError(res));
 }
 
+/** Undo a delete, while the course is still recoverable. */
+export async function restoreCourse(id: number, user: string): Promise<void> {
+  const res = await request(
+    `/api/courses/${id}/restore?user=${encodeURIComponent(user)}`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readError(res));
+}
+
 export async function saveProgress(
   id: number,
   user: string,

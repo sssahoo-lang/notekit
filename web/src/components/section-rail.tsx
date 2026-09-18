@@ -46,7 +46,10 @@ export function SectionRail({
   return (
     <>
       {/* Narrow screens: one line saying where you are, plus progress. */}
-      <div className="sticky top-14 z-30 -mx-4 mb-6 border-b border-border/70 bg-background/90 px-4 py-2.5 backdrop-blur-md lg:hidden">
+      {/* Sticks to the underside of the site header, which is taller on a
+          phone because its nav wraps. The header measures itself and
+          publishes the number; the fallback covers the first paint. */}
+      <div className="sticky top-[var(--site-header-h,3.5rem)] z-30 -mx-4 mb-6 border-b border-border/70 bg-background/90 px-4 py-2.5 backdrop-blur-md lg:hidden">
         <details className="group">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
             <span className="min-w-0">

@@ -93,6 +93,8 @@ export type SavedCourseSummary = {
   planned_count?: number;
   /** Sections that actually have readable notes (not refused/empty). */
   usable_count?: number;
+  /** Mean teaching score across judged sections, 0 to 1, or null if unjudged. */
+  teaching?: number | null;
   estimated_cost_usd: number | null;
   with_quiz: boolean;
   used_style: boolean;

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -144,6 +145,7 @@ export function CourseForm({
   };
 
   const chosen = Object.keys(prefs).length;
+  const goalRef = useRef<HTMLTextAreaElement>(null);
 
   // Summarised on the closed disclosure, so the defaults are legible without
   // opening it.
@@ -166,6 +168,7 @@ export function CourseForm({
 
         <Textarea
           id="goal"
+          ref={goalRef}
           value={goal}
           onChange={(e) => onGoalChange(e.target.value)}
           rows={3}
@@ -184,6 +187,7 @@ export function CourseForm({
         <GoalSuggestions
           query={goal}
           userId={userId}
+          inputRef={goalRef}
           onPick={onGoalChange}
           onOpenCourse={onOpenCourse}
         />
