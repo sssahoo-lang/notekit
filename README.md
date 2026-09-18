@@ -787,8 +787,7 @@ mail. Still missing: email verification, and any second factor.
 canonicalisation relies on the planner emitting a consistent slug, so close
 variants may still fragment a corpus. arXiv alone is a poor source for
 foundational material, since it indexes the research frontier, not pedagogy,
-which
-is why Wikipedia is fetched alongside it.
+which is why Wikipedia is fetched alongside it.
 
 ---
 
