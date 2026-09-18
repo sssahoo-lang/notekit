@@ -9,7 +9,7 @@
 ![Faithfulness](https://img.shields.io/badge/faithfulness-90.5%25-15803D)
 ![Refusal accuracy](https://img.shields.io/badge/refusal_accuracy-100%25-15803D)
 [![CI](https://github.com/sssahoo-lang/notekit/actions/workflows/ci.yml/badge.svg)](https://github.com/sssahoo-lang/notekit/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-264_passing-15803D)
+![Tests](https://img.shields.io/badge/tests-323_passing-15803D)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Most AI study tools always give you an answer. You cannot tell which sentences
@@ -25,7 +25,7 @@ deliberately out-of-scope questions are correctly refused.** The judge that
 produces the first of those numbers is itself in the repository, and the
 [Results](#results) section says what it varies by.
 
-[![NoteKit screenshots: library, cited reader, collapsible sections, a diagram treated as a claim, practice questions, and style matching](docs/screenshots.png)](docs/screenshots.png)
+[![NoteKit: the library with courses in progress, related ideas and writing controls before anything is generated, asking about a highlighted passage with practice questions after, adding your own material, learning a writing style, and signing in](docs/screenshots.png)](docs/screenshots.png)
 
 ### Contents
 
@@ -664,6 +664,53 @@ just the section.
 
 </details>
 
+<details>
+<summary><b>An accessibility audit that kept measuring itself wrong</b> · three sweeps, three bad measurements</summary>
+
+<br>
+
+Three sweeps of the desktop UI produced three confident failure lists. All
+three were wrong, and the third one shipped before it was caught.
+
+A contrast pass first parsed computed colours with a regex and reported twelve
+AA failures. The palette is authored in `lab()`, which does not parse as RGB.
+Reading pixels back from a canvas instead gave two failures at a ratio of 1.06,
+which is the signature of ignoring alpha, not of a real defect. Compositing the
+alpha against the painted background gave the actual answer: **zero failures,
+lowest ratio 5.24 in light and 6.68 in dark**, with black-on-white measuring
+21.0 as a sanity check.
+
+A focus pass then reported that all 41 focusable elements lacked a visible
+indicator. They do not: `.focus()` called from a script never matches
+`:focus-visible` in Chrome, so the rule under test was the one thing the test
+could not trigger. Driving real `Tab` presses showed `:focus-visible` matching
+and a 2px ring painting on every one.
+
+What survived was smaller and real. The skip link lived inside a header that is
+`lg:hidden`, so on a desktop it was `display: none` — absent exactly where the
+sidebar puts a whole course library ahead of the content. The service-unreachable
+state had a banner on a phone and a bare red dot on a desktop, with the command
+to fix it only in the hidden header. The `<aside>` announced as an unnamed
+complementary landmark. Two checkbox labels wrapped their own hint text, so the
+accessible name was a run-on sentence read out before the checkbox state.
+
+The third sweep found the notes ran about 123 characters a line and capped them
+at 52ch. That one was wrong too, and unlike the others it was already committed
+before a real course existed to check it against. The 123 came from measuring
+the home page's 16px sans body font and assuming the reader filled a 1040px
+column. It does not: the reader is 18.4px Source Serif inside `max-w-5xl` minus
+the section rail, which is **660px — 76 characters a line — at 1440px and still
+660px at 2560px**. It was already inside the comfortable band. The cap took it
+to 58 and made the column needlessly narrow, so it was reverted.
+
+The lesson is the one the rest of this README keeps arriving at: a measurement
+taken on a proxy is not a measurement. Two of these were caught by sanity checks
+before anything changed. The one that shipped was the one where no sanity check
+was available, because there was no generated course on hand to look at, and it
+was measured on the nearest page instead of the right one.
+
+</details>
+
 ---
 
 ## Limitations and what isn't proven
@@ -682,6 +729,18 @@ from different planner-generated syllabi, and the run-to-run variance turned out
 to be as large as the effect. The change is still defensible on mechanism, since
 generation can only address a goal if retrieval surfaced material for it, but it
 has not been measured, and it is not counted as a result.
+
+**Wide diagrams are cut off at the frame.** A Mermaid flowchart with more than
+about three nodes in a row is drawn at a zoom that does not fit the figure, so
+the outer nodes are clipped and labels read as "entenceBERT encod". The claims
+in a clipped diagram are still extracted and judged from the Mermaid source, so
+this costs legibility rather than grounding, but it is a visible defect. It is
+not fixed: Excalidraw's `fitToContent` returned its 0.1 minimum zoom when given
+a `maxZoom`, when handed the converted elements as its target, and
+intermittently when called before it had synced its own viewport, and computing
+the zoom by hand from the scene bounds did not land either. Whatever is wrong
+is in when the fit runs relative to Excalidraw's internal sizing, and it wants
+a focused session rather than another guess.
 
 **The judge shares a model family with the writer.** Faithfulness is judged by
 Haiku against notes written by Sonnet, so the grader shares blind spots with the
@@ -749,9 +808,10 @@ is why Wikipedia is fetched alongside it.
 | 15. Deleting is reversible; library cards carry the teaching score; phone layout fixed | done |
 | 16. Accounts: register, sign in, sessions, and courses that follow the person | done |
 | 17. Password reset and an account page | done; mail delivery needs an SMTP host |
+| 18. Desktop layout and keyboard/screen-reader pass | done |
 
-Beyond the milestones: 264 tests run in CI on every push, 208 on the Python
-logic layer and 56 on the web one, and every citation the export writes is
+Beyond the milestones: 323 tests run in CI on every push, 265 on the Python
+logic layer and 58 on the web one, and every citation the export writes is
 verified to resolve to a real source passage.
 
 Some things are built but unmeasured, and are called out here rather than
